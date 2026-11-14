@@ -150,6 +150,7 @@ void Terrain3DData::do_for_regions(const Rect2i &p_area, const Callable &p_callb
 }
 
 void Terrain3DData::change_region_size(int p_new_size) {
+	ERR_FAIL_COND_MSG(_terrain->has_edit_layers(), "Detach edit layers before reslicing base regions.");
 	LOG(INFO, "Changing region size from: ", _region_size, " to ", p_new_size);
 	if (!is_valid_region_size(p_new_size)) {
 		LOG(ERROR, "Invalid region size: ", p_new_size, ". Must be power of 2, 64-2048");
@@ -273,6 +274,7 @@ Ref<Terrain3DRegion> Terrain3DData::add_region_blank(const Vector2i &p_region_lo
  *	p_update - rebuild the maps if true. Set to false if bulk adding many regions.
  */
 Error Terrain3DData::add_region(const Ref<Terrain3DRegion> &p_region, const bool p_update) {
+	ERR_FAIL_COND_V_MSG(_terrain->has_edit_layers() && !_terrain->is_layer_composing(), ERR_UNAVAILABLE, "Add terrain through the selected edit layer.");
 	IS_INIT_MESG("Data not initialized", FAILED);
 	if (p_region.is_null()) {
 		LOG(ERROR, "Provided region is null. Returning");
@@ -341,6 +343,7 @@ void Terrain3DData::remove_regionl(const Vector2i &p_region_loc, const bool p_up
 // Remove region marks the region for deletion, and removes it from the active arrays indexed by ID
 // It remains stored in _regions and the file remains on disk until saved, when both are removed
 void Terrain3DData::remove_region(const Ref<Terrain3DRegion> &p_region, const bool p_update) {
+	ERR_FAIL_COND_MSG(_terrain->has_edit_layers() && !_terrain->is_layer_composing(), "Remove terrain through the selected edit layer.");
 	if (p_region.is_null()) {
 		LOG(ERROR, "Region not found or is null. Returning");
 		return;
@@ -365,6 +368,10 @@ void Terrain3DData::remove_region(const Ref<Terrain3DRegion> &p_region, const bo
 }
 
 void Terrain3DData::save_directory(const String &p_dir) {
+	if (_terrain->has_edit_layers() && !_terrain->is_layer_composing()) {
+		_terrain->get_layer_stack()->call("save_base_directory", p_dir);
+		return;
+	}
 	LOG(INFO, "Saving data files to ", p_dir);
 	Array locations = _regions.keys();
 	for (const Vector2i &region_loc : locations) {
@@ -377,6 +384,10 @@ void Terrain3DData::save_directory(const String &p_dir) {
 
 // You may need to do a file system scan to update FileSystem panel
 void Terrain3DData::save_region(const Vector2i &p_region_loc, const String &p_dir, const bool p_16_bit, const CompressMode p_color_compress_mode) {
+	if (_terrain->has_edit_layers() && !_terrain->is_layer_composing()) {
+		_terrain->get_layer_stack()->call("save_base_region", p_region_loc, p_dir, p_16_bit, int(p_color_compress_mode));
+		return;
+	}
 	Ref<Terrain3DRegion> region = get_region(p_region_loc);
 	if (region.is_null()) {
 		LOG(ERROR, "No region found at: ", p_region_loc);
@@ -422,6 +433,9 @@ void Terrain3DData::load_directory(const String &p_dir) {
 	if (files.size() == 0) {
 		LOG(INFO, "No Terrain3D region files found in: ", p_dir);
 		return;
+	}
+	if (_terrain->has_edit_layers() && !_terrain->is_layer_composing()) {
+		_terrain->get_layer_stack()->call("reset_base");
 	}
 
 	_clear();
@@ -681,7 +695,32 @@ void Terrain3DData::update_maps(const MapType p_map_type, const bool p_all_regio
 	}
 }
 
+void Terrain3DData::apply_layer_region(const Vector2i &p_location, const TypedArray<Image> &p_maps) {
+	ERR_FAIL_COND_MSG(_terrain->has_edit_layers() && !_terrain->is_layer_composing(), "Only the layer compositor can replace composed maps.");
+	ERR_FAIL_COND(p_maps.size() != TYPE_MAX);
+	Ref<Terrain3DRegion> region = get_region(p_location);
+	if (region.is_null() || region->is_deleted()) {
+		region.instantiate();
+		region->set_region_size(_region_size);
+		region->set_location(p_location);
+		region->set_maps(p_maps);
+		add_region(region, false);
+	} else {
+		region->set_maps(p_maps);
+		int id = get_region_id(p_location);
+		if (id >= 0 && id < _height_maps.size()) {
+			_height_maps[id] = p_maps[TYPE_HEIGHT];
+			_control_maps[id] = p_maps[TYPE_CONTROL];
+			_color_maps[id] = p_maps[TYPE_COLOR];
+		}
+	}
+	region->clear_compressed_color_map();
+	region->calc_height_range();
+	region->set_edited(true);
+}
+
 void Terrain3DData::set_pixel(const MapType p_map_type, const Vector3 &p_global_position, const Color &p_pixel) {
+	ERR_FAIL_COND_MSG(_terrain->has_edit_layers() && !_terrain->is_layer_composing(), "The composed terrain is read-only. Write to Terrain3DLayerData instead.");
 	if (p_map_type < 0 || p_map_type >= TYPE_MAX) {
 		LOG(ERROR, "Specified map type out of range");
 		return;
@@ -975,6 +1014,7 @@ void Terrain3DData::calc_height_range(const bool p_recursive) {
  *	p_scale - Scale all height values by this factor (applied after offset)
  */
 void Terrain3DData::import_images(const TypedArray<Image> &p_images, const Vector3 &p_global_position, const real_t p_offset, const real_t p_scale) {
+	ERR_FAIL_COND_MSG(_terrain->has_edit_layers() && !_terrain->is_layer_composing(), "Import into Terrain3DLayerData while edit layers are active.");
 	IS_INIT_MESG("Data not initialized", VOID);
 	// Validate images and determine common size
 	if (p_images.size() != TYPE_MAX) {
@@ -1441,6 +1481,7 @@ void Terrain3DData::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("get_color_maps"), &Terrain3DData::get_color_maps);
 	ClassDB::bind_method(D_METHOD("get_maps", "map_type"), &Terrain3DData::get_maps);
 	ClassDB::bind_method(D_METHOD("update_maps", "map_type", "all_regions", "generate_mipmaps"), &Terrain3DData::update_maps, DEFVAL(TYPE_MAX), DEFVAL(true), DEFVAL(false));
+	ClassDB::bind_method(D_METHOD("_apply_layer_region", "location", "maps"), &Terrain3DData::apply_layer_region);
 	ClassDB::bind_method(D_METHOD("get_height_maps_rid"), &Terrain3DData::get_height_maps_rid);
 	ClassDB::bind_method(D_METHOD("get_control_maps_rid"), &Terrain3DData::get_control_maps_rid);
 	ClassDB::bind_method(D_METHOD("get_color_maps_rid"), &Terrain3DData::get_color_maps_rid);

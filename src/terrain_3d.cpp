@@ -11,6 +11,7 @@
 #include <godot_cpp/classes/physics_ray_query_parameters3d.hpp>
 #include <godot_cpp/classes/project_settings.hpp>
 #include <godot_cpp/classes/quad_mesh.hpp>
+#include <godot_cpp/classes/script.hpp>
 #include <godot_cpp/classes/shader_material.hpp>
 #include <godot_cpp/classes/surface_tool.hpp>
 #include <godot_cpp/classes/viewport_texture.hpp>
@@ -81,7 +82,7 @@ void Terrain3D::_initialize() {
 		LOG(INFO, "Initializing main subsystems");
 		_data->initialize(this);
 		_material->initialize(this);
-		_assets->initialize(this);
+		get_assets()->initialize(this);
 		_collision->initialize(this);
 		_instancer->initialize(this);
 		_setup_terrain_mesher();
@@ -101,7 +102,7 @@ void Terrain3D::__physics_process(const double p_delta) {
 	if (!_initialized) {
 		return;
 	}
-	_assets->poll_material_changes(p_delta);
+	get_assets()->poll_material_changes(p_delta);
 	if (!_camera.is_valid()) {
 		LOG(DEBUG, "Camera is null, getting the current one");
 		_grab_camera();
@@ -551,6 +552,9 @@ void Terrain3D::set_data_directory(String p_dir) {
 	// assume we want to retain the current data.
 	// Otherwise, clear data and reload dir
 	if (!old_dir.is_empty() || Util::get_files(p_dir, "terrain3d*.res").size() > 0) {
+		if (_layer_stack) {
+			_layer_stack->call("reset_base");
+		}
 		_initialized = false;
 		_destroy_labels();
 		_destroy_collision();
@@ -563,10 +567,62 @@ void Terrain3D::set_data_directory(String p_dir) {
 
 void Terrain3D::set_assets(const Ref<Terrain3DAssets> &p_assets) {
 	SET_IF_DIFF(_assets, p_assets);
+	if (_layer_stack) {
+		_layer_stack->call("invalidate");
+	}
 	LOG(INFO, "Setting asset list");
 	_initialized = false;
 	_initialize();
 	LOG(DEBUG, "Emitting assets_changed");
+	emit_signal("assets_changed");
+}
+
+Node *Terrain3D::ensure_layer_stack() {
+	if (!is_inside_tree() || !is_node_ready()) {
+		return nullptr;
+	}
+	if (!_layer_stack) {
+		Ref<Script> script = ResourceLoader::get_singleton()->load("res://addons/terrain_3d/src/layers/terrain_3d_layer_stack.gd");
+		ERR_FAIL_COND_V(script.is_null() || !script->can_instantiate(), nullptr);
+		_layer_stack = memnew(Node);
+		_layer_stack->set_name("_Terrain3DLayerStack");
+		_layer_stack->set_script(script);
+		add_child(_layer_stack, false, Node::INTERNAL_MODE_BACK);
+	}
+	return _layer_stack;
+}
+
+bool Terrain3D::has_edit_layers() const {
+	return _layer_stack && bool(_layer_stack->get("has_layers"));
+}
+
+bool Terrain3D::is_layer_composing() const {
+	return _layer_stack && bool(_layer_stack->get("composing"));
+}
+
+void Terrain3D::set_layer_bindings(const Ref<Resource> &p_bindings) {
+	SET_IF_DIFF(_layer_bindings, p_bindings);
+	if (_layer_stack) {
+		_layer_stack->call("invalidate");
+	}
+}
+
+void Terrain3D::set_effective_assets(const Ref<Terrain3DAssets> &p_assets) {
+	if (_effective_assets == p_assets) {
+		return;
+	}
+	if (_effective_assets.is_valid()) {
+		_effective_assets->uninitialize();
+	}
+	_effective_assets = p_assets;
+	Ref<Terrain3DAssets> effective = get_assets();
+	if (!effective->is_connected("textures_changed", callable_mp(_material.ptr(), &Terrain3DMaterial::update).bind(Terrain3DMaterial::TEXTURE_ARRAYS))) {
+		effective->connect("textures_changed", callable_mp(_material.ptr(), &Terrain3DMaterial::update).bind(Terrain3DMaterial::TEXTURE_ARRAYS));
+	}
+	if (_initialized) {
+		effective->initialize(this);
+		_material->update(Terrain3DMaterial::TEXTURE_ARRAYS);
+	}
 	emit_signal("assets_changed");
 }
 
@@ -592,6 +648,7 @@ void Terrain3D::set_plugin(Object *p_plugin) {
 }
 
 void Terrain3D::set_region_size(const RegionSize p_size) {
+	ERR_FAIL_COND_MSG(has_edit_layers() && !is_layer_composing() && p_size != _region_size, "Detach edit layers before changing region size.");
 	if (!is_valid_region_size(p_size)) {
 		LOG(ERROR, "Invalid region size: ", p_size, ". Must be power of 2, 64-2048");
 		return;
@@ -799,6 +856,9 @@ void Terrain3D::set_mesh_size(const int p_size) {
 
 void Terrain3D::set_vertex_spacing(const real_t p_spacing) {
 	SET_IF_DIFF(_vertex_spacing, CLAMP(p_spacing, 0.25f, 100.0f));
+	if (_layer_stack) {
+		_layer_stack->call("invalidate");
+	}
 	LOG(INFO, "Setting vertex spacing: ", _vertex_spacing);
 	if (_collision && _data && _instancer && _material.is_valid()) {
 		_instancer->_update_vertex_spacing(_vertex_spacing);
@@ -1138,7 +1198,10 @@ void Terrain3D::set_warning(const uint8_t p_warning, const bool p_enabled) {
 
 PackedStringArray Terrain3D::_get_configuration_warnings() const {
 	PackedStringArray psa;
-	if (_data_directory.is_empty()) {
+	if (_layer_stack) {
+		psa.append_array(PackedStringArray(_layer_stack->get("errors")));
+	}
+	if (_data_directory.is_empty() && (!has_edit_layers() || !Dictionary(_layer_stack->get("_base")).is_empty())) {
 		psa.push_back("No data directory specified. Select a directory then save the scene to write data.");
 	}
 	if (_warnings & WARN_MISMATCHED_SIZE) {
@@ -1204,6 +1267,12 @@ void Terrain3D::_notification(const int p_what) {
 		case NOTIFICATION_READY: {
 			// Node is ready
 			LOG(INFO, "NOTIFICATION_READY");
+			if (!IS_EDITOR && has_meta("_terrain3d_layer_bake")) {
+				Ref<Resource> bake = get_meta("_terrain3d_layer_bake");
+				if (bake.is_valid()) {
+					bake->call("apply", this);
+				}
+			}
 			// Optional: Run the testing suite
 			//#include "unit_testing.h"
 			//test_differs();
@@ -1265,8 +1334,16 @@ void Terrain3D::_notification(const int p_what) {
 		case NOTIFICATION_EDITOR_PRE_SAVE: {
 			// Editor Node is about to save the current scene
 			LOG(INFO, "NOTIFICATION_EDITOR_PRE_SAVE");
-			if (_data_directory.is_empty()) {
+			if (_layer_stack) {
+				_layer_stack->call("prepare_save");
+			}
+			if (has_meta("_terrain3d_preview_owner")) {
+				break;
+			}
+			if (_data_directory.is_empty() && (!has_edit_layers() || !Dictionary(_layer_stack->get("_base")).is_empty())) {
 				LOG(ERROR, "Data directory is empty. Set it to save regions to disk.");
+			} else if (_data_directory.is_empty()) {
+				// A layer-only scene owns its source data in the layer resources.
 			} else if (!_data) {
 				LOG(DEBUG, "Save requested, but no valid data object. Skipping");
 			} else {
@@ -1312,6 +1389,9 @@ void Terrain3D::_notification(const int p_what) {
 			if (_assets.is_valid()) {
 				_assets->uninitialize();
 			}
+			if (_effective_assets.is_valid()) {
+				_effective_assets->uninitialize();
+			}
 			if (_material.is_valid()) {
 				_material->uninitialize();
 			}
@@ -1335,6 +1415,8 @@ void Terrain3D::_notification(const int p_what) {
 			_destroy_instancer();
 			_destroy_collision(true);
 			_assets.unref();
+			_effective_assets.unref();
+			_layer_stack = nullptr;
 			_material.unref();
 			memdelete_safely(_data);
 			_destroy_labels();
@@ -1396,6 +1478,13 @@ void Terrain3D::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("get_material"), &Terrain3D::get_material);
 	ClassDB::bind_method(D_METHOD("set_assets", "assets"), &Terrain3D::set_assets);
 	ClassDB::bind_method(D_METHOD("get_assets"), &Terrain3D::get_assets);
+	ClassDB::bind_method(D_METHOD("get_source_assets"), &Terrain3D::get_source_assets);
+	ClassDB::bind_method(D_METHOD("set_effective_assets", "assets"), &Terrain3D::set_effective_assets);
+	ClassDB::bind_method(D_METHOD("ensure_layer_stack"), &Terrain3D::ensure_layer_stack);
+	ClassDB::bind_method(D_METHOD("get_layer_stack"), &Terrain3D::get_layer_stack);
+	ClassDB::bind_method(D_METHOD("has_edit_layers"), &Terrain3D::has_edit_layers);
+	ClassDB::bind_method(D_METHOD("set_layer_bindings", "bindings"), &Terrain3D::set_layer_bindings);
+	ClassDB::bind_method(D_METHOD("get_layer_bindings"), &Terrain3D::get_layer_bindings);
 	ClassDB::bind_method(D_METHOD("get_collision"), &Terrain3D::get_collision);
 	ClassDB::bind_method(D_METHOD("get_instancer"), &Terrain3D::get_instancer);
 	ClassDB::bind_method(D_METHOD("set_editor", "editor"), &Terrain3D::set_editor);
@@ -1569,7 +1658,8 @@ void Terrain3D::_bind_methods() {
 
 	// Object references
 	ADD_PROPERTY(PropertyInfo(Variant::OBJECT, "material", PROPERTY_HINT_RESOURCE_TYPE, "Terrain3DMaterial"), "set_material", "get_material");
-	ADD_PROPERTY(PropertyInfo(Variant::OBJECT, "assets", PROPERTY_HINT_RESOURCE_TYPE, "Terrain3DAssets"), "set_assets", "get_assets");
+	ADD_PROPERTY(PropertyInfo(Variant::OBJECT, "assets", PROPERTY_HINT_RESOURCE_TYPE, "Terrain3DAssets"), "set_assets", "get_source_assets");
+	ADD_PROPERTY(PropertyInfo(Variant::OBJECT, "layer_bindings", PROPERTY_HINT_RESOURCE_TYPE, "Resource"), "set_layer_bindings", "get_layer_bindings");
 	ADD_PROPERTY(PropertyInfo(Variant::OBJECT, "data", PROPERTY_HINT_NONE, "", PROPERTY_USAGE_NONE, "Terrain3DData"), "", "get_data");
 	ADD_PROPERTY(PropertyInfo(Variant::OBJECT, "collision", PROPERTY_HINT_NONE, "", PROPERTY_USAGE_NONE, "Terrain3DCollision"), "", "get_collision");
 	ADD_PROPERTY(PropertyInfo(Variant::OBJECT, "instancer", PROPERTY_HINT_NONE, "", PROPERTY_USAGE_NONE, "Terrain3DInstancer"), "", "get_instancer");

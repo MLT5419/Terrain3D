@@ -55,6 +55,9 @@ private:
 	// Object references
 	Terrain3DData *_data = nullptr;
 	Ref<Terrain3DAssets> _assets;
+	Ref<Terrain3DAssets> _effective_assets;
+	Ref<Resource> _layer_bindings;
+	Node *_layer_stack = nullptr;
 	Terrain3DCollision *_collision = nullptr;
 	Terrain3DInstancer *_instancer = nullptr;
 	Terrain3DEditor *_editor = nullptr;
@@ -165,7 +168,15 @@ public:
 	// Object references
 	Terrain3DData *get_data() const { return _data; }
 	void set_assets(const Ref<Terrain3DAssets> &p_assets);
-	Ref<Terrain3DAssets> get_assets() const { return _assets; }
+	Ref<Terrain3DAssets> get_assets() const { return _effective_assets.is_valid() ? _effective_assets : _assets; }
+	Ref<Terrain3DAssets> get_source_assets() const { return _assets; }
+	void set_effective_assets(const Ref<Terrain3DAssets> &p_assets);
+	void set_layer_bindings(const Ref<Resource> &p_bindings);
+	Ref<Resource> get_layer_bindings() const { return _layer_bindings; }
+	Node *ensure_layer_stack();
+	Node *get_layer_stack() const { return _layer_stack; }
+	bool is_layer_composing() const;
+	bool has_edit_layers() const;
 	Terrain3DCollision *get_collision() const { return _collision; }
 	Terrain3DInstancer *get_instancer() const { return _instancer; }
 	void set_editor(Terrain3DEditor *p_editor);

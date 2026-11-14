@@ -902,7 +902,7 @@ void Terrain3DEditor::set_brush_data(const Dictionary &p_data) {
 	_brush_data["gradient_points"] = _brush_data.get("gradient_points", PackedVector3Array());
 
 	TypedArray<int> texture_asset_ids = _brush_data.get("texture_asset_ids", TypedArray<int>());
-	const Ref<Terrain3DAssets> assets = _terrain ? _terrain->get_assets() : Ref<Terrain3DAssets>();
+	const Ref<Terrain3DAssets> assets = get_active_layer() ? Ref<Terrain3DAssets>(get_active_layer()->call("get_edit_assets")) : (_terrain ? _terrain->get_assets() : Ref<Terrain3DAssets>());
 	const int texture_count = assets.is_valid() ? assets->get_texture_count() : Terrain3DAssets::MAX_TEXTURES;
 	TypedArray<int> valid_texture_ids;
 	if (texture_count > 0) {
@@ -956,6 +956,15 @@ void Terrain3DEditor::start_operation(const Vector3 &p_global_position) {
 	IS_DATA_INIT_MESG("Terrain isn't initialized", VOID);
 	// In case mouse-up was intercepted (by a modal dialog, focus change, or a raycast miss, etc...)
 	stop_operation();
+	Node *layer = get_active_layer();
+	if (layer) {
+		_is_operating = layer->call("begin_operation", int(_tool), int(_operation));
+		return;
+	}
+	if (_terrain->has_edit_layers()) {
+		LOG(ERROR, "Select a Terrain3DLayer to edit the layered terrain.");
+		return;
+	}
 	LOG(INFO, "Setting up undo snapshot");
 	_undo_data.clear();
 	_undo_data["region_locations"] = _terrain->get_data()->get_region_locations().duplicate();
@@ -969,6 +978,10 @@ void Terrain3DEditor::start_operation(const Vector3 &p_global_position) {
 // Called on mouse movement with left mouse button down
 void Terrain3DEditor::operate(const Vector3 &p_global_position, const real_t p_camera_direction) {
 	IS_DATA_INIT_MESG("Terrain isn't initialized", VOID);
+	if (_is_operating && get_active_layer()) {
+		get_active_layer()->call("paint_brush", p_global_position, p_camera_direction, _brush_data, int(_tool), int(_operation));
+		return;
+	}
 	if (!_is_operating) {
 		LOG(ERROR, "Run start_operation() before operating");
 		return;
@@ -1016,6 +1029,11 @@ void Terrain3DEditor::backup_region(const Ref<Terrain3DRegion> &p_region) {
 // Called on left mouse button released
 void Terrain3DEditor::stop_operation() {
 	IS_DATA_INIT_MESG("Terrain isn't initialized", VOID);
+	if (_is_operating && get_active_layer()) {
+		get_active_layer()->call("end_operation", _terrain->get_plugin());
+		_is_operating = false;
+		return;
+	}
 	// If undo was created and terrain actually modified, store it
 	LOG(DEBUG, "Backed up regions: ", _original_regions.size(), ", Edited regions: ", _edited_regions.size(),
 			", Added/Removed regions: ", _added_removed_locations.size());
@@ -1048,6 +1066,8 @@ void Terrain3DEditor::stop_operation() {
 ///////////////////////////
 
 void Terrain3DEditor::_bind_methods() {
+	ClassDB::bind_method(D_METHOD("set_active_layer", "layer"), &Terrain3DEditor::set_active_layer);
+	ClassDB::bind_method(D_METHOD("get_active_layer"), &Terrain3DEditor::get_active_layer);
 	BIND_ENUM_CONSTANT(ADD);
 	BIND_ENUM_CONSTANT(SUBTRACT);
 	BIND_ENUM_CONSTANT(REPLACE);

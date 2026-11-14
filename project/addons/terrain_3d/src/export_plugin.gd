@@ -19,7 +19,7 @@ func _begin_customize_resources(platform: EditorExportPlatform, features: Packed
 	_platform_name = platform.get_os_name()
 	_features = features
 	# Change when the resource layout or export conversion policy changes.
-	_hash = "Terrain3D-unified-cache-v4|" + _platform_name + "|" + "|".join(features)
+	_hash = "Terrain3D-layer-bake-v9|" + _platform_name + "|" + "|".join(features)
 	_hash += "|" + str(ProjectSettings.get_setting("rendering/renderer/rendering_method", "gl_compatibility"))
 	_hash += "|" + str(ProjectSettings.get_setting("rendering/renderer/rendering_method.mobile", "mobile"))
 	return true
@@ -36,9 +36,139 @@ func _get_customization_configuration_hash() -> int:
 	return hash(_hash)
 
 
+func _begin_customize_scenes(platform: EditorExportPlatform, features: PackedStringArray) -> bool:
+	return true
+
+
+func _layer_manifest(path: String) -> String:
+	return COOKED_DIRECTORY.path_join("layers_" + (path + _hash).sha256_text() + ".cfg")
+
+
+func _contains_layers(scene: PackedScene, seen: Dictionary = {}) -> bool:
+	if seen.has(scene.get_instance_id()):
+		return false
+	seen[scene.get_instance_id()] = true
+	var state := scene.get_state()
+	for node in state.get_node_count():
+		var instance := state.get_node_instance(node)
+		if instance and _contains_layers(instance, seen):
+			return true
+		for property in state.get_node_property_count(node):
+			var value: Variant = state.get_node_property_value(node, property)
+			if value is Script:
+				while value:
+					if value.get_global_name() == &"Terrain3DLayer":
+						return true
+					value = value.get_base_script()
+	return false
+
+
+func _stage_file(path: String) -> void:
+	if not _staged_files.has(path) and FileAccess.file_exists(path):
+		add_file(path, FileAccess.get_file_as_bytes(path), false)
+		_staged_files[path] = true
+
+
+func _customize_scene(scene: Node, path: String) -> Node:
+	var layers: Array[Terrain3DLayer] = []
+	var nodes: Array[Node] = [scene]
+	for node in scene.find_children("*", "", true, false):
+		if node.owner:
+			nodes.append(node)
+	for node in nodes:
+		if node is Terrain3DLayer:
+			layers.append(node)
+	if layers.is_empty():
+		return null
+	# A real World3D makes the ordinary compositor usable here; it is removed before packing.
+	var view := SubViewport.new()
+	view.own_world_3d = true
+	view.disable_3d = true
+	Engine.get_main_loop().root.add_child(view)
+	view.add_child(scene)
+	var hosts := {}
+	for layer in layers:
+		layer._ensure_host()
+		hosts[layer.get_terrain()] = true
+	var manifest := ConfigFile.new()
+	var paths := PackedStringArray()
+	var promoted_hosts: Array[Terrain3D] = []
+	for host: Terrain3D in hosts:
+		var stack: Terrain3DLayerStack = host.ensure_layer_stack()
+		stack.exporting = true
+		if stack.recompose(true) != OK:
+			# A slot-only prefab is an authoring template. Its placed instances are baked
+			# in their enclosing scene with that instance's bindings, never preview assets.
+			if host.has_meta("_terrain3d_preview_owner") and not stack.errors.is_empty() and Array(stack.errors).all(func(message: String): return message.contains("no material bound")):
+				var template: Node = instance_from_id(host.get_meta("_terrain3d_preview_owner"))
+				template.set_meta("_terrain3d_layer_template", true)
+				get_export_platform().add_message(EditorExportPlatform.EXPORT_MESSAGE_WARNING, "Terrain3D", "%s is an unbound authoring template; only its bound placements can be baked." % path)
+				continue
+			get_export_platform().add_message(EditorExportPlatform.EXPORT_MESSAGE_ERROR, "Terrain3D", "Cannot bake %s: %s" % [path, "; ".join(stack.errors)])
+			view.remove_child(scene)
+			view.free()
+			return null
+		var bake := Terrain3DLayerBake.new()
+		bake.vertex_spacing = host.vertex_spacing
+		bake.region_size = host.region_size
+		bake.assets = _customize_resource(host.get_assets(), "")
+		for region: Terrain3DRegion in host.data.get_regions_active():
+			bake.regions.append(region.duplicate(true))
+		var owner_node: Node = instance_from_id(host.get_meta("_terrain3d_preview_owner")) if host.has_meta("_terrain3d_preview_owner") else host
+		var bake_path := COOKED_DIRECTORY.path_join("layer_" + (path + str(scene.get_path_to(owner_node)) + _hash).sha256_text() + ".res")
+		DirAccess.make_dir_recursive_absolute(COOKED_DIRECTORY)
+		if ResourceSaver.save(bake, bake_path, ResourceSaver.FLAG_COMPRESS) != OK:
+			get_export_platform().add_message(EditorExportPlatform.EXPORT_MESSAGE_ERROR, "Terrain3D", "Could not save " + bake_path)
+			continue
+		bake = ResourceLoader.load(bake_path, "", ResourceLoader.CACHE_MODE_REPLACE)
+		if owner_node is Terrain3DLayer:
+			# Turn the temporary preview host into the exported standalone terrain.
+			# Its generated children remain internal; the terrain itself becomes owned.
+			owner_node.remove_child(host)
+			owner_node.add_child(host)
+			host.owner = scene
+			promoted_hosts.append(host)
+			host.remove_meta("_terrain3d_preview_owner")
+		host.set_meta("_terrain3d_layer_bake", bake)
+		host.data_directory = ""
+		host.assets = bake.assets
+		host.layer_bindings = null
+		host.free_editor_textures = false
+		paths.append(bake_path)
+		_stage_file(bake_path)
+		_stage_references(bake)
+	manifest.set_value("layers", "bakes", paths)
+	manifest.save(_layer_manifest(path))
+	var markers: Array[Node3D] = []
+	for layer in layers:
+		# Plain markers preserve node paths/groups without retaining prefab source
+		# dependencies or running authoring scripts in the exported game.
+		var marker := Node3D.new()
+		marker.name = layer.name
+		marker.transform = layer.transform
+		markers.append(marker)
+		layer.replace_by(marker, true)
+		if layer == scene:
+			scene = marker
+		layer.free()
+	for node in nodes + markers + promoted_hosts:
+		if is_instance_valid(node) and node != scene:
+			node.owner = scene
+	view.remove_child(scene)
+	view.free()
+	return scene
+
+
 func _export_file(path: String, type: String, features: PackedStringArray) -> void:
 	# Authoring masters and cached variants are not runtime dependencies. Selected
 	# cooked copies live separately and are reached through the exported assets.
+	if type == "PackedScene" and _contains_layers(ResourceLoader.load(path)):
+		var manifest := ConfigFile.new()
+		if manifest.load(_layer_manifest(path)) == OK:
+			for bake_path: String in manifest.get_value("layers", "bakes", PackedStringArray()):
+				_stage_file(bake_path)
+				_stage_references(ResourceLoader.load(bake_path))
+		return
 	if type == "Terrain3DTextureCache" and not path.begins_with(COOKED_DIRECTORY + "/"):
 		skip()
 	elif type in ["Terrain3DAssets", "Terrain3DTextureAsset", "PackedScene"] or path.get_extension() in ["res", "tres", "tscn", "scn"]:

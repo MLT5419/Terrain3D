@@ -72,6 +72,7 @@ public: // Constants
 
 private:
 	Terrain3D *_terrain = nullptr;
+	uint64_t _active_layer_id = 0;
 
 	// Painter settings & variables
 	Tool _tool = REGION;
@@ -106,6 +107,8 @@ public:
 
 	void set_terrain(Terrain3D *p_terrain) { _terrain = p_terrain; }
 	Terrain3D *get_terrain() const { return _terrain; }
+	void set_active_layer(Node *p_layer) { _active_layer_id = p_layer ? p_layer->get_instance_id() : 0; }
+	Node *get_active_layer() const { return Object::cast_to<Node>(ObjectDB::get_instance(_active_layer_id)); }
 
 	void set_brush_data(const Dictionary &p_data);
 	Dictionary get_brush_data() const { return _brush_data; }

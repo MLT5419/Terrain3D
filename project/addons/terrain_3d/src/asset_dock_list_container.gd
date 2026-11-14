@@ -54,7 +54,7 @@ func update_asset_list() -> void:
 		return
 	
 	if type == Terrain3DAssets.TYPE_TEXTURE:
-		asset_list = t.assets.get_texture_list()
+		asset_list = plugin.get_edit_assets().get_texture_list()
 	else:
 		if plugin.terrain:
 			plugin.terrain.assets.create_mesh_thumbnails()
@@ -212,7 +212,10 @@ func update_selection() -> void:
 func _on_edit_clicked(p_entry: Terrain3DListEntry) -> void:
 	selected_list = [ p_entry.resource.id ]
 	update_selection()
-	EditorInterface.edit_resource(p_entry.resource)
+	if is_instance_valid(plugin.active_layer) and type == Terrain3DAssets.TYPE_TEXTURE:
+		EditorInterface.edit_resource(plugin.active_layer.slots[p_entry.resource.id])
+	else:
+		EditorInterface.edit_resource(p_entry.resource)
 
 
 func _on_highlight_clicked(p_entry: Terrain3DListEntry) -> void:
@@ -285,6 +288,24 @@ func clear_resources(p_asset_ids: Array[int]) -> void:
 
 
 func update_resource(p_resource: Resource, p_id: int) -> void:
+	if is_instance_valid(plugin.active_layer):
+		if type != Terrain3DAssets.TYPE_TEXTURE:
+			return
+		var layer: Terrain3DLayer = plugin.active_layer
+		if p_id < layer.slots.size():
+			if not p_resource:
+				push_warning("Clear a layer's paint with Erase Mode. Removing or reordering painted slots changes their meaning.")
+				return
+			layer.slots[p_id].default_resource = p_resource
+		else:
+			var slot := Terrain3DLayerSlot.new()
+			slot.key = StringName("%s.material_%s" % [layer.name.to_snake_case(), p_id])
+			slot.default_resource = p_resource
+			layer.slots.append(slot)
+		layer._changed()
+		EditorInterface.mark_scene_as_unsaved()
+		update_asset_list()
+		return
 	if not plugin.is_terrain_valid():
 		plugin.select_terrain()
 		await get_tree().process_frame

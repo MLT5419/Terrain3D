@@ -3,6 +3,7 @@
 	<brief_description>
 	</brief_description>
 	<description>
+		When edit layers are active, this object exposes their final composition. Direct height, region and import writes are rejected; edit Terrain3DLayerData instead. Saving the data directory preserves the original base regions, while layer sources are saved through their owning scenes/resources.
 		Terrain3D divides all data into regions which fit on a grid in the world. These coordinates are called region locations. The map data are stored in instances of [Terrain3DRegion], which are saved to individual files. This class manages region loading, unloading, data retreival and manipulation.
 	</description>
 	<tutorials>

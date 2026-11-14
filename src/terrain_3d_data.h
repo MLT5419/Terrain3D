@@ -140,6 +140,7 @@ public:
 	TypedArray<Image> get_color_maps() const { return _color_maps; }
 	TypedArray<Image> get_maps(const MapType p_map_type) const;
 	void update_maps(const MapType p_map_type = TYPE_MAX, const bool p_all_regions = true, const bool p_generate_mipmaps = false);
+	void apply_layer_region(const Vector2i &p_location, const TypedArray<Image> &p_maps);
 	RID get_height_maps_rid() const { return _generated_height_maps.get_rid(); }
 	RID get_control_maps_rid() const { return _generated_control_maps.get_rid(); }
 	RID get_color_maps_rid() const { return _generated_color_maps.get_rid(); }
@@ -313,10 +314,19 @@ inline void Terrain3DData::set_control(const Vector3 &p_global_position, const u
 }
 
 inline uint32_t Terrain3DData::get_control(const Vector3 &p_global_position) const {
-	// Always float: control map is packed as a float32 Color component
-	// regardless of engine precision.
-	float val = get_pixel(TYPE_CONTROL, p_global_position).r;
-	return (std::isnan(val)) ? UINT32_MAX : as_uint(val);
+	const Terrain3DRegion *region = get_region_ptr(get_region_location(p_global_position));
+	if (!region || region->is_deleted()) {
+		return UINT32_MAX;
+	}
+	Image *map = region->get_map_ptr(TYPE_CONTROL);
+	if (!map) {
+		return UINT32_MAX;
+	}
+	// Valid high material IDs can form IEEE NaN bit patterns. Read the integer
+	// payload directly rather than treating a packed NaN as a missing pixel.
+	Vector2i pixel = world_to_pixelv(p_global_position);
+	PackedByteArray bytes = map->get_data();
+	return reinterpret_cast<const uint32_t *>(bytes.ptr())[pixel.y * map->get_width() + pixel.x];
 }
 
 inline void Terrain3DData::set_control_base_id(const Vector3 &p_global_position, const uint8_t p_base) {
