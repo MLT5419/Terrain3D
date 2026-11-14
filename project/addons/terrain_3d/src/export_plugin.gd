@@ -19,7 +19,7 @@ func _begin_customize_resources(platform: EditorExportPlatform, features: Packed
 	_platform_name = platform.get_os_name()
 	_features = features
 	# Change when the resource layout or export conversion policy changes.
-	_hash = "Terrain3D-layer-bake-v13|" + _platform_name + "|" + "|".join(features)
+	_hash = "Terrain3D-program-bake-v1|" + _platform_name + "|" + "|".join(features)
 	_hash += "|" + str(ProjectSettings.get_setting("rendering/renderer/rendering_method", "gl_compatibility"))
 	_hash += "|" + str(ProjectSettings.get_setting("rendering/renderer/rendering_method.mobile", "mobile"))
 	return true
@@ -55,11 +55,29 @@ func _contains_layers(scene: PackedScene, seen: Dictionary = {}) -> bool:
 			return true
 		for property in state.get_node_property_count(node):
 			var value: Variant = state.get_node_property_value(node, property)
+			if _has_programs(value):
+				return true
 			if value is Script:
 				while value:
 					if value.get_global_name() in [&"Terrain3DLayer", &"Terrain3DAttachmentGroup"]:
 						return true
 					value = value.get_base_script()
+	return false
+
+
+func _has_programs(value: Variant) -> bool:
+	if value is Terrain3DProgramSlot:
+		return true
+	if value is Terrain3DAssets:
+		for asset in value.texture_list:
+			if asset and not asset.programs.is_empty():
+				return true
+	elif value is Terrain3DTextureAsset or value is Terrain3DLayerSlot:
+		return not value.programs.is_empty()
+	elif value is Array:
+		for entry in value:
+			if _has_programs(entry):
+				return true
 	return false
 
 
@@ -89,7 +107,7 @@ func _customize_scene(scene: Node, path: String) -> Node:
 			attachments.append(node)
 		if node is Terrain3D:
 			terrains.append(node)
-	if layers.is_empty() and attachments.is_empty():
+	if layers.is_empty() and attachments.is_empty() and not terrains.any(func(host: Terrain3D): return _has_programs(host.programs) or _has_programs(host.assets)):
 		return null
 	# A real World3D makes the ordinary compositor usable here; it is removed before packing.
 	var view := SubViewport.new()
@@ -101,6 +119,15 @@ func _customize_scene(scene: Node, path: String) -> Node:
 	for layer in layers:
 		layer._ensure_host()
 		hosts[layer.get_terrain()] = true
+	for host in terrains:
+		if _has_programs(host.programs) or _has_programs(host.assets):
+			hosts[host] = true
+	for attachment in attachments:
+		if attachment.terrain_interaction and attachment.terrain_interaction.mode != Terrain3DTerrainInteraction.Mode.DISABLED:
+			attachment.update_attachments(true)
+			var host: Terrain3D = attachment.terrain if attachment.terrain else Terrain3DPlacementSolver.resolve_host(attachment)
+			if host:
+				hosts[host] = true
 	var manifest := ConfigFile.new()
 	var paths := PackedStringArray()
 	var promoted_hosts: Array[Terrain3D] = []
@@ -146,6 +173,7 @@ func _customize_scene(scene: Node, path: String) -> Node:
 		host.data_directory = ""
 		host.assets = bake.assets
 		host.layer_bindings = null
+		host.programs = []
 		host.free_editor_textures = false
 		paths.append(bake_path)
 		_stage_file(bake_path)
@@ -157,6 +185,7 @@ func _customize_scene(scene: Node, path: String) -> Node:
 			view.free()
 			return null
 		promoted_scenes.append_array(output.nodes)
+		promoted_scenes.append_array(stack.program_scheduler.promote_nodes(scene))
 		for scene_path: String in output.files:
 			paths.append(scene_path)
 			_stage_file(scene_path)
@@ -283,7 +312,7 @@ func _customize_resource(resource: Resource, path: String) -> Resource:
 			layers.append(_runtime_layer(asset, size, compression))
 		assets.texture_list = layers
 		return assets
-	if resource is Terrain3DTextureAsset and not resource.get_runtime_material_cache():
+	if resource is Terrain3DTextureAsset and (not resource.get_runtime_material_cache() or not resource.programs.is_empty()):
 		return _runtime_layer(resource, resource.material_texture_size, resolve_compression(Terrain3DTextureCache.AUTO))
 	return null
 
@@ -297,8 +326,14 @@ func _cooked_cache(cache: Terrain3DTextureCache) -> Terrain3DTextureCache:
 
 
 func _runtime_layer(asset: Terrain3DTextureAsset, size: int, compression: int = Terrain3DTextureCache.BC7) -> Terrain3DTextureAsset:
-	if not asset or asset.get_runtime_material_cache():
+	if not asset:
 		return asset
+	if asset.get_runtime_material_cache():
+		if asset.programs.is_empty():
+			return asset
+		var stripped := asset.duplicate() as Terrain3DTextureAsset
+		stripped.programs = []
+		return stripped
 	if asset.prepare_texture_cache(size) != OK:
 		push_error("Terrain3D: Cannot prepare texture layer '%s' for export." % asset.name)
 		return asset
@@ -314,6 +349,7 @@ func _runtime_layer(asset: Terrain3DTextureAsset, size: int, compression: int = 
 	var settings := asset.get_material_settings()
 	var layer := asset.duplicate() as Terrain3DTextureAsset
 	layer.material = null
+	layer.programs = []
 	layer.albedo_texture = null
 	layer.normal_texture = null
 	layer.set_runtime_material_cache(true)

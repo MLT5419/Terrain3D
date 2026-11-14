@@ -7,6 +7,8 @@ extends Node3D
 enum HeightMode { ADD, REPLACE }
 enum InstanceMode { ADD, MASK_LOWER, REPLACE }
 signal layer_changed
+@export var programs: Array[Terrain3DProgramSlot] = []
+@export_tool_button("Regenerate Programs") var regenerate_programs_action: Callable = regenerate_programs
 
 ## Source maps. Save externally for collaboration; Make Data Unique before editing an independent copy.
 @export var data: Terrain3DLayerData:
@@ -116,6 +118,11 @@ func _process(delta: float) -> void:
 	if state != _state_hash:
 		_state_hash = state
 		_changed()
+
+func regenerate_programs() -> void:
+	var host := get_terrain()
+	if host:
+		host.regenerate_programs()
 
 func _notification(what: int) -> void:
 	if what == NOTIFICATION_TRANSFORM_CHANGED:
@@ -518,7 +525,7 @@ func restore_instances(target: Terrain3DScatterData, snapshot: Terrain3DScatterD
 
 func _get_configuration_warnings() -> PackedStringArray:
 	var result := PackedStringArray()
-	if not data and not scatter_data:
+	if not data and not scatter_data and not programs.any(func(slot: Terrain3DProgramSlot): return slot and slot.enabled):
 		result.append("Assign a Terrain3DLayerData resource before painting or importing heights.")
 	if not uses_local_transform() and not is_transform_valid():
 		result.append("Paint layers use the terrain grid. Use Terrain3DStamp for movable content.")

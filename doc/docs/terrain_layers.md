@@ -117,3 +117,5 @@ Heights and materials compose first, instances blend next, then ordinary attachm
 Export stores final mesh transforms in the baked terrain regions and writes full-scene instances as ordinary owned nodes. It removes the layer/attachment authoring data from the converted hierarchy. Scripts, collision and furniture remain part of their full scenes. An Export All Resources preset can still include unrelated authoring files explicitly.
 
 Open `addons/terrain_3d/extras/layers/objects_demo.tscn` for mesh roles with two skins, complete scene instances, a lower-layer clearing mask, independently attached rocks, and a rigid cabin with furniture.
+
+See [Terrain Programs](terrain_programs.md) for procedural height/material generation, material-scoped vegetation, mesh/decal outputs and model-driven terrain interactions.

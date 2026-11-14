@@ -1,0 +1,18 @@
+[gd_resource type="Resource" script_class="Terrain3DProgramSlot" format=3 uid="uid://ci5fxicr3hqlh"]
+
+[ext_resource type="Script" uid="uid://gcb62detrtpx" path="res://addons/terrain_3d/src/objects/terrain_3d_instance_slot.gd" id="1_3fyrr"]
+[ext_resource type="Script" uid="uid://b0106nltwake7" path="res://addons/terrain_3d/src/layers/terrain_3d_layer_slot.gd" id="2_gh8mc"]
+[ext_resource type="Script" uid="uid://cxsl41lod3vgh" path="res://addons/terrain_3d/src/programs/terrain_3d_program_slot.gd" id="3_dc1ih"]
+
+[resource]
+script = ExtResource("3_dc1ih")
+key = &"mountains"
+program = "res://addons/terrain_3d/src/programs/builtin/noise_height.gd"
+bounds = Rect2(-24, -24, 48, 48)
+parameters = {
+"amplitude": 6.0,
+"base_height": 3.0,
+"frequency": 0.04
+}
+height_mode = 1
+uid = "365ab325b1bd146de3028502"

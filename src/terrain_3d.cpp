@@ -566,7 +566,13 @@ void Terrain3D::set_data_directory(String p_dir) {
 }
 
 void Terrain3D::set_assets(const Ref<Terrain3DAssets> &p_assets) {
-	SET_IF_DIFF(_assets, p_assets);
+	if (_assets == p_assets) {
+		return;
+	}
+	if (_assets.is_valid() && _assets->is_connected("textures_changed", callable_mp(this, &Terrain3D::_update_programs))) {
+		_assets->disconnect("textures_changed", callable_mp(this, &Terrain3D::_update_programs));
+	}
+	_assets = p_assets;
 	if (_layer_stack) {
 		_layer_stack->call("invalidate");
 	}
@@ -575,6 +581,47 @@ void Terrain3D::set_assets(const Ref<Terrain3DAssets> &p_assets) {
 	_initialize();
 	LOG(DEBUG, "Emitting assets_changed");
 	emit_signal("assets_changed");
+	if (is_inside_tree()) {
+		call_deferred("_update_programs");
+	}
+}
+
+void Terrain3D::set_programs(const TypedArray<Resource> &p_programs) {
+	_programs = p_programs;
+	if (is_inside_tree()) {
+		call_deferred("_update_programs");
+	}
+}
+
+void Terrain3D::_update_programs() {
+	if (!IS_EDITOR && has_meta("_terrain3d_layer_bake")) {
+		return;
+	}
+	if (!is_inside_tree() || !is_node_ready()) {
+		return;
+	}
+	if (_assets.is_valid() && !_assets->is_connected("textures_changed", callable_mp(this, &Terrain3D::_update_programs))) {
+		_assets->connect("textures_changed", callable_mp(this, &Terrain3D::_update_programs));
+	}
+	bool active = !_programs.is_empty();
+	if (_assets.is_valid()) {
+		for (const Ref<Terrain3DTextureAsset> &asset : _assets->get_texture_list()) {
+			active = active || (asset.is_valid() && !asset->get_programs().is_empty());
+		}
+	}
+	if (active) {
+		ensure_layer_stack();
+	}
+	if (_layer_stack) {
+		_layer_stack->call("invalidate");
+	}
+}
+
+void Terrain3D::regenerate_programs() {
+	Node *stack = ensure_layer_stack();
+	if (stack) {
+		stack->call("regenerate_programs");
+	}
 }
 
 Node *Terrain3D::ensure_layer_stack() {
@@ -1265,6 +1312,7 @@ void Terrain3D::_notification(const int p_what) {
 		}
 
 		case NOTIFICATION_READY: {
+			call_deferred("_update_programs");
 			// Node is ready
 			LOG(INFO, "NOTIFICATION_READY");
 			if (!IS_EDITOR && has_meta("_terrain3d_layer_bake")) {
@@ -1481,6 +1529,10 @@ void Terrain3D::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("get_source_assets"), &Terrain3D::get_source_assets);
 	ClassDB::bind_method(D_METHOD("set_effective_assets", "assets"), &Terrain3D::set_effective_assets);
 	ClassDB::bind_method(D_METHOD("ensure_layer_stack"), &Terrain3D::ensure_layer_stack);
+	ClassDB::bind_method(D_METHOD("_update_programs"), &Terrain3D::_update_programs);
+	ClassDB::bind_method(D_METHOD("set_programs", "programs"), &Terrain3D::set_programs);
+	ClassDB::bind_method(D_METHOD("get_programs"), &Terrain3D::get_programs);
+	ClassDB::bind_method(D_METHOD("regenerate_programs"), &Terrain3D::regenerate_programs);
 	ClassDB::bind_method(D_METHOD("get_layer_stack"), &Terrain3D::get_layer_stack);
 	ClassDB::bind_method(D_METHOD("has_edit_layers"), &Terrain3D::has_edit_layers);
 	ClassDB::bind_method(D_METHOD("set_layer_bindings", "bindings"), &Terrain3D::set_layer_bindings);
@@ -1660,6 +1712,7 @@ void Terrain3D::_bind_methods() {
 	ADD_PROPERTY(PropertyInfo(Variant::OBJECT, "material", PROPERTY_HINT_RESOURCE_TYPE, "Terrain3DMaterial"), "set_material", "get_material");
 	ADD_PROPERTY(PropertyInfo(Variant::OBJECT, "assets", PROPERTY_HINT_RESOURCE_TYPE, "Terrain3DAssets"), "set_assets", "get_source_assets");
 	ADD_PROPERTY(PropertyInfo(Variant::OBJECT, "layer_bindings", PROPERTY_HINT_RESOURCE_TYPE, "Resource"), "set_layer_bindings", "get_layer_bindings");
+	ADD_PROPERTY(PropertyInfo(Variant::ARRAY, "programs", PROPERTY_HINT_ARRAY_TYPE, "Terrain3DProgramSlot"), "set_programs", "get_programs");
 	ADD_PROPERTY(PropertyInfo(Variant::OBJECT, "data", PROPERTY_HINT_NONE, "", PROPERTY_USAGE_NONE, "Terrain3DData"), "", "get_data");
 	ADD_PROPERTY(PropertyInfo(Variant::OBJECT, "collision", PROPERTY_HINT_NONE, "", PROPERTY_USAGE_NONE, "Terrain3DCollision"), "", "get_collision");
 	ADD_PROPERTY(PropertyInfo(Variant::OBJECT, "instancer", PROPERTY_HINT_NONE, "", PROPERTY_USAGE_NONE, "Terrain3DInstancer"), "", "get_instancer");

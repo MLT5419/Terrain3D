@@ -36,12 +36,24 @@ bool Terrain3DTextureAsset::_is_valid_format(const Ref<Texture2D> &p_texture) co
 // Public Functions
 ///////////////////////////
 
+void Terrain3DTextureAsset::set_programs(const TypedArray<Resource> &p_programs) {
+	_programs = p_programs;
+	emit_signal("setting_changed");
+}
+
+void Terrain3DTextureAsset::set_role_key(const StringName &p_key) {
+	SET_IF_DIFF(_role_key, p_key);
+	emit_signal("setting_changed");
+}
+
 void Terrain3DTextureAsset::initialize() {
 	LOG(INFO, _id, ": ", _name, ": initializing asset");
 	_connect_material_textures();
 }
 
 void Terrain3DTextureAsset::clear() {
+	_programs.clear();
+	_role_key = StringName();
 	LOG(INFO, "Clearing TextureAsset");
 	_disconnect_material();
 	_source_mode = SOURCE_TEXTURES;
@@ -513,6 +525,15 @@ void Terrain3DTextureAsset::set_detiling_shift(const real_t p_detiling_shift) {
 ///////////////////////////
 
 void Terrain3DTextureAsset::_bind_methods() {
+	ClassDB::bind_method(D_METHOD("set_programs", "programs"), &Terrain3DTextureAsset::set_programs);
+	ClassDB::bind_method(D_METHOD("get_programs"), &Terrain3DTextureAsset::get_programs);
+	ClassDB::bind_method(D_METHOD("set_role_key", "key"), &Terrain3DTextureAsset::set_role_key);
+	ClassDB::bind_method(D_METHOD("get_role_key"), &Terrain3DTextureAsset::get_role_key);
+	ADD_GROUP("Programs", "");
+	ADD_PROPERTY(PropertyInfo(Variant::STRING_NAME, "role_key"), "set_role_key", "get_role_key");
+	ADD_PROPERTY(PropertyInfo(Variant::ARRAY, "programs", PROPERTY_HINT_ARRAY_TYPE, "Terrain3DProgramSlot"), "set_programs", "get_programs");
+	ADD_GROUP("", "");
+
 	ADD_SIGNAL(MethodInfo("id_changed",
 			PropertyInfo(Variant::INT, "type"),
 			PropertyInfo(Variant::INT, "old_id"),

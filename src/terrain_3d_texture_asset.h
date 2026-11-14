@@ -44,6 +44,9 @@ private:
 	void _connect_material_textures();
 	void _poll_material_changes();
 
+	TypedArray<Resource> _programs;
+	StringName _role_key;
+
 	// Saved Data
 	Color _albedo_color = Color(1.f, 1.f, 1.f, 1.f);
 	Ref<Texture2D> _albedo_texture;
@@ -66,6 +69,10 @@ private:
 public:
 	Terrain3DTextureAsset() { clear(); }
 	~Terrain3DTextureAsset() { _disconnect_material(); }
+	void set_programs(const TypedArray<Resource> &p_programs);
+	TypedArray<Resource> get_programs() const { return _programs; }
+	void set_role_key(const StringName &p_key);
+	StringName get_role_key() const { return _role_key; }
 	void initialize() override;
 	void clear() override;
 	void set_source_mode(SourceMode p_mode);

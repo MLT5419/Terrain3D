@@ -57,6 +57,8 @@ private:
 	Ref<Terrain3DAssets> _assets;
 	Ref<Terrain3DAssets> _effective_assets;
 	Ref<Resource> _layer_bindings;
+	TypedArray<Resource> _programs;
+	void _update_programs();
 	Node *_layer_stack = nullptr;
 	Terrain3DCollision *_collision = nullptr;
 	Terrain3DInstancer *_instancer = nullptr;
@@ -171,6 +173,9 @@ public:
 	Ref<Terrain3DAssets> get_assets() const { return _effective_assets.is_valid() ? _effective_assets : _assets; }
 	Ref<Terrain3DAssets> get_source_assets() const { return _assets; }
 	void set_effective_assets(const Ref<Terrain3DAssets> &p_assets);
+	void set_programs(const TypedArray<Resource> &p_programs);
+	TypedArray<Resource> get_programs() const { return _programs; }
+	void regenerate_programs();
 	void set_layer_bindings(const Ref<Resource> &p_bindings);
 	Ref<Resource> get_layer_bindings() const { return _layer_bindings; }
 	Node *ensure_layer_stack();

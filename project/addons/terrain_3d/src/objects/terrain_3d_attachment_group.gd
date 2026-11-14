@@ -12,6 +12,7 @@ const ID_META := &"_terrain3d_attachment_id"
 @export var terrain: Terrain3D
 @export var enabled := true
 @export var runtime_follow := false
+@export var terrain_interaction: Terrain3DTerrainInteraction
 @export_tool_button("Capture Current Offsets") var capture_action: Callable = capture_offsets
 @export_tool_button("Update Attachments") var update_action: Callable = update_attachments
 # This is per scene instance; shared source resources never receive derived transforms.
@@ -22,6 +23,7 @@ var _poll := 0.0
 var _solving := false
 var _solved_once := false
 var _state_hash := 0
+var _interaction_hash := 0
 
 func _ready() -> void:
 	if not source:
@@ -41,6 +43,15 @@ func _process(delta: float) -> void:
 	if _poll < 0.15:
 		return
 	_poll = 0.0
+	if terrain_interaction:
+		var host := terrain if terrain else Terrain3DPlacementSolver.resolve_host(self)
+		if host:
+			var state := hash([terrain_interaction.fingerprint(), enabled, global_transform if processing == Processing.CHILDREN else source.records])
+			if state != _interaction_hash:
+				_interaction_hash = state
+				var stack := host.ensure_layer_stack()
+				if stack:
+					stack.invalidate()
 	if not Engine.is_editor_hint() and _solved_once and not runtime_follow:
 		return
 	update_attachments()
@@ -222,7 +233,14 @@ func update_attachments(force: bool = false) -> void:
 			source.records[id] = record
 			projection = Terrain3DPlacementSolver.solve(_host, _authored(target, record.rest, policy), policy, record.offset)
 		var participating := Terrain3DPlacementSolver.layer_enabled(self)
-		if enabled and projection.get("valid", false):
+		if enabled and terrain_interaction and terrain_interaction.mode != Terrain3DTerrainInteraction.Mode.DISABLED:
+			# The model supplies the reference plane; do not add its old ground gap again.
+			var pose := authored
+			if terrain_interaction.mode == Terrain3DTerrainInteraction.Mode.PLACE_THEN_TERRAFORM and _host.get_layer_stack():
+				var key := "interaction/" + str(_host.get_path_to(self)) + "/" + id
+				pose = _host.get_layer_stack().program_scheduler.planned_pose(key, authored)
+			target.transform = target.get_parent_node_3d().global_transform.affine_inverse() * pose if target.get_parent_node_3d() and not target.top_level else pose
+		elif enabled and projection.get("valid", false):
 			var solved: Transform3D = projection.transform
 			target.transform = target.get_parent_node_3d().global_transform.affine_inverse() * solved if target.get_parent_node_3d() and not target.top_level else solved
 		else:

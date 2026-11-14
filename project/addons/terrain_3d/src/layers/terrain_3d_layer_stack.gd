@@ -24,9 +24,13 @@ var _fallback := Terrain3DTextureAsset.new()
 var exporting := false
 var _save_frame := -1
 var scatter := Terrain3DScatterCompositor.new()
+var program_scheduler := Terrain3DProgramScheduler.new()
+var revision := 0
+var _program_hash := 0
 
 func _ready() -> void:
 	host = get_parent() as Terrain3D
+	program_scheduler.initialize(self)
 	invalidate()
 
 func _process(delta: float) -> void:
@@ -34,20 +38,33 @@ func _process(delta: float) -> void:
 	if _poll < 0.2:
 		return
 	_poll = 0.0
+	var saved_layers := layers
+	layers = []
+	var preview: int = host.get_meta("_terrain3d_preview_owner", 0)
+	_collect(instance_from_id(preview) if preview and is_instance_id_valid(preview) else host)
+	program_scheduler.collect(layers)
+	layers = saved_layers
+	var program_hash := program_scheduler.poll_fingerprint()
+	if program_hash != _program_hash:
+		_program_hash = program_hash
+		invalidate()
 	var state := hash([host.vertex_spacing, host.layer_bindings.fingerprint() if host.layer_bindings is Terrain3DLayerBindings else 0, host.get_source_assets().texture_list, host.get_source_assets().mesh_list])
 	if state != _binding_hash:
 		_binding_hash = state
 		invalidate()
 
 func invalidate() -> void:
+	revision += 1
 	_full = true
 	_queue()
 
 func invalidate_area(area: Rect2) -> void:
+	revision += 1
 	_dirty_areas.append(area)
 	_queue()
 
 func invalidate_layer(layer: Terrain3DLayer) -> void:
+	revision += 1
 	_invalidate_branch(layer)
 	_queue()
 
@@ -78,6 +95,12 @@ func _queue() -> void:
 	if not _pending and is_inside_tree():
 		_pending = true
 		call_deferred("recompose")
+
+func regenerate_programs() -> void:
+	program_scheduler.request_regenerate()
+
+func _exit_tree() -> void:
+	program_scheduler.shutdown()
 
 func reset_base() -> void:
 	_base.clear()
@@ -260,16 +283,29 @@ func recompose(force: bool = false) -> Error:
 	if composing or not is_inside_tree() or not is_instance_valid(host) or not host.data:
 		return ERR_BUSY
 	_full = _full or force
-	layers.clear()
+	var previous_layers := layers.duplicate()
+	var previous_active := has_layers
+	layers = []
 	var preview_owner: int = host.get_meta("_terrain3d_preview_owner", 0)
 	if preview_owner and not is_instance_id_valid(preview_owner):
 		return ERR_UNCONFIGURED
 	_collect(instance_from_id(preview_owner) if preview_owner else host)
-	has_layers = not layers.is_empty()
 	errors.clear()
 	if not _base_ready:
 		_capture_base()
+	if not program_scheduler.build(layers, _dirty_areas, _full):
+		errors.append_array(program_scheduler.errors)
+		program_scheduler.reject()
+		layers = previous_layers
+		has_layers = previous_active
+		host.update_configuration_warnings()
+		return ERR_INVALID_DATA
+	layers = program_scheduler.candidate_sources()
+	has_layers = not layers.is_empty() or program_scheduler.active
 	if not _resolve_palette():
+		program_scheduler.reject()
+		layers = previous_layers
+		has_layers = previous_active
 		host.update_configuration_warnings()
 		return ERR_INVALID_DATA
 	var tiles := {}
@@ -292,7 +328,7 @@ func recompose(force: bool = false) -> Error:
 	_dirty_areas.clear()
 	_full = false
 	composing = true
-	has_layers = not layers.is_empty()
+	has_layers = not layers.is_empty() or program_scheduler.active
 	var original_locations := host.data.get_region_locations().duplicate()
 	var outputs := {}
 	for tile: Vector2i in tiles:
@@ -323,9 +359,11 @@ func recompose(force: bool = false) -> Error:
 	if host.get_collision():
 		host.get_collision().update(Vector2i(2147483647, 2147483647), true)
 	host.snap()
+	program_scheduler.accept()
 	scatter.compose(self)
 	composing = false
 	Terrain3DAttachmentGroup.solve_for_host(host)
+	program_scheduler.notify_applied()
 	if not has_layers:
 		host.set_effective_assets(null)
 		_base_ready = false
