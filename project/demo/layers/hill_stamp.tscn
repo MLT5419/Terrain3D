@@ -1,9 +1,9 @@
 [gd_scene format=3 uid="uid://cj8skik2db4a6"]
 
 [ext_resource type="Script" uid="uid://d4a1nqme2480" path="res://addons/terrain_3d/src/layers/terrain_3d_stamp.gd" id="1_5mrsq"]
-[ext_resource type="Resource" uid="uid://dlvv8megumdh7" path="res://addons/terrain_3d/extras/layers/hill_data.res" id="2_6skn4"]
+[ext_resource type="Resource" uid="uid://dlvv8megumdh7" path="res://demo/layers/hill_data.res" id="2_6skn4"]
 [ext_resource type="Script" uid="uid://b0106nltwake7" path="res://addons/terrain_3d/src/layers/terrain_3d_layer_slot.gd" id="3_80iqp"]
-[ext_resource type="Terrain3DTextureAsset" uid="uid://veus1mjon6fm" path="res://addons/terrain_3d/extras/layers/stone.res" id="4_6k3af"]
+[ext_resource type="Terrain3DTextureAsset" uid="uid://veus1mjon6fm" path="res://demo/layers/stone.res" id="4_6k3af"]
 
 [sub_resource type="Resource" id="Resource_7mh4w"]
 script = ExtResource("3_80iqp")

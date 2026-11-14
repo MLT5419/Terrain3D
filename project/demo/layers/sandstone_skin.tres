@@ -1,6 +1,6 @@
 [gd_resource type="Resource" script_class="Terrain3DLayerBindings" format=3 uid="uid://bmu0bca1he35f"]
 
-[ext_resource type="Terrain3DTextureAsset" uid="uid://cfiq35sryvqx3" path="res://addons/terrain_3d/extras/layers/sandstone.res" id="1_wsckr"]
+[ext_resource type="Terrain3DTextureAsset" uid="uid://cfiq35sryvqx3" path="res://demo/layers/sandstone.res" id="1_wsckr"]
 [ext_resource type="Script" uid="uid://d37th4uq6vlo2" path="res://addons/terrain_3d/src/layers/terrain_3d_layer_bindings.gd" id="2_48opq"]
 
 [resource]

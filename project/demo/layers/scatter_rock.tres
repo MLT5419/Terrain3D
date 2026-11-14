@@ -1,6 +1,6 @@
 [gd_resource type="Terrain3DMeshAsset" format=3 uid="uid://dfa8iubar0hxj"]
 
-[ext_resource type="PackedScene" uid="uid://bd76l3soncvr0" path="res://addons/terrain_3d/extras/layers/scatter_rock.tscn" id="1_8yvwx"]
+[ext_resource type="PackedScene" uid="uid://bd76l3soncvr0" path="res://demo/layers/scatter_rock.tscn" id="1_8yvwx"]
 
 [resource]
 name = "Stone role"

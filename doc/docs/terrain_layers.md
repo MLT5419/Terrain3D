@@ -5,7 +5,7 @@ Terrain edit layers keep sculpting and material painting separate from the origi
 
 ## Getting started
 
-Open `addons/terrain_3d/extras/layers/layers_demo.tscn` for a working example. It instances an independent ground scene and two instances of the same hill Stamp scene. Both hills share their height data; one instance uses a sandstone skin. The source data and materials are separate `.res` files.
+Open `demo/layers/layers_demo.tscn` for a working example. It instances an independent ground scene and two instances of the same hill Stamp scene. Both hills share their height data; one instance uses a sandstone skin. The source data and materials are separate `.res` files.
 
 1. Add a `Terrain3DPaintLayer` beneath an existing `Terrain3D`, or create a scene whose root is `Terrain3DPaintLayer` or `Terrain3DStamp`.
 2. Use **Create Layer Data**, then save its `Terrain3DLayerData` resource as an external `.res` file. Embedded data is also supported.
@@ -116,6 +116,6 @@ Heights and materials compose first, instances blend next, then ordinary attachm
 
 Export stores final mesh transforms in the baked terrain regions and writes full-scene instances as ordinary owned nodes. It removes the layer/attachment authoring data from the converted hierarchy. Scripts, collision and furniture remain part of their full scenes. An Export All Resources preset can still include unrelated authoring files explicitly.
 
-Open `addons/terrain_3d/extras/layers/objects_demo.tscn` for mesh roles with two skins, complete scene instances, a lower-layer clearing mask, independently attached rocks, and a rigid cabin with furniture.
+Open `demo/layers/objects_demo.tscn` for mesh roles with two skins, complete scene instances, a lower-layer clearing mask, independently attached rocks, and a rigid cabin with furniture.
 
 See [Terrain Programs](terrain_programs.md) for procedural height/material generation, material-scoped vegetation, mesh/decal outputs and model-driven terrain interactions.

@@ -1,8 +1,8 @@
 [gd_scene format=3 uid="uid://b2kpiib1501nm"]
 
-[ext_resource type="PackedScene" uid="uid://y2orre7v1udr" path="res://addons/terrain_3d/extras/layers/ground_layer.tscn" id="1_hakox"]
-[ext_resource type="PackedScene" uid="uid://cj8skik2db4a6" path="res://addons/terrain_3d/extras/layers/hill_stamp.tscn" id="2_u6rlq"]
-[ext_resource type="Resource" uid="uid://bmu0bca1he35f" path="res://addons/terrain_3d/extras/layers/sandstone_skin.tres" id="3_hiona"]
+[ext_resource type="PackedScene" uid="uid://y2orre7v1udr" path="res://demo/layers/ground_layer.tscn" id="1_hakox"]
+[ext_resource type="PackedScene" uid="uid://cj8skik2db4a6" path="res://demo/layers/hill_stamp.tscn" id="2_u6rlq"]
+[ext_resource type="Resource" uid="uid://bmu0bca1he35f" path="res://demo/layers/sandstone_skin.tres" id="3_hiona"]
 
 [sub_resource type="Terrain3DMaterial" id="Terrain3DMaterial_0leqx"]
 _shader_parameters = {

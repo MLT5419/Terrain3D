@@ -1,7 +1,7 @@
 Terrain Programs
 ================
 
-Terrain programs generate derived terrain data, semantic masks, instances, meshes and decals. Programs can be mounted on Terrain3D, a Layer/Stamp, or a material role. Their outputs remain separate from hand-painted source data. Open `addons/terrain_3d/extras/programs/programs_demo.tscn` for a noise landscape, slope-based material classification, material-scoped trees, and a cabin with a fitted foundation, vegetation clearance and a dirt decal.
+Terrain programs generate derived terrain data, semantic masks, instances, meshes and decals. Programs can be mounted on Terrain3D, a Layer/Stamp, or a material role. Their outputs remain separate from hand-painted source data. Open `demo/programs/programs_demo.tscn` for a noise landscape, slope-based material classification, material-scoped trees, and a cabin with a fitted foundation, vegetation clearance and a dirt decal.
 
 ## Configure a program
 
@@ -32,7 +32,7 @@ Scripts extend Godot `RefCounted` or `Resource`. GDScript uses `@tool`; C# uses 
 
 The context and output are Godot objects. C# accesses their methods with `GodotObject.Call`; use Variant-compatible Godot types and `Godot.Collections.Dictionary/Array` in descriptors. Both languages enter the same scheduler and use the same buffered output API. The C# class name must match its filename, the file must be included in the project's `.csproj`, and the project must be built in Godot .NET with a suitable .NET SDK.
 
-Copy the examples from `addons/terrain_3d/extras/programs/csharp/` into your .NET project's script directory and select the copied `.cs` file. That examples directory is ignored by Godot's asset scan so a standard Godot project does not acquire a C# requirement. The example classes use their own namespace. Godot's .NET platform/export restrictions still apply to a .NET project.
+Copy the examples from `demo/programs/csharp/` into your .NET project's script directory and select the copied `.cs` file. That examples directory is ignored by Godot's asset scan so a standard Godot project does not acquire a C# requirement. The example classes use their own namespace. Godot's .NET platform/export restrictions still apply to a .NET project.
 
 A successful configuration change can be undone through the editor's normal property history; regeneration derives the corresponding output again. Manual configurations require Regenerate after undoing a setting. Program scripts are trusted project code: keep generation within the context/output contract and keep cleanup callbacks limited to controller state.
 

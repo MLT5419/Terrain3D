@@ -3,7 +3,7 @@ Foliage Instancing
 
 Terrain3D provides two types of instancing systems that can be used to render not only grass, but also rocks, trees, pinecones, debris, or anything else you want.
 
-1. A Particle Shader allows the GPU to automatically generate meshes around the camera. We have provided an example that you can modify and extend for your own needs in `extras/particle_example`. We refer to these meshes as `particles`.
+1. A Particle Shader allows the GPU to automatically generate meshes around the camera. We have provided an example that you can modify and extend for your own needs in `demo/particles`. We refer to these meshes as `particles`.
 
 2. [Terrain3DInstancer](../api/class_terrain3dinstancer.rst) optimally renders hundreds of thousands of meshes that have been intentionally placed either by code or by hand using Godot's [MultiMesh](https://docs.godotengine.org/en/stable/classes/class_multimesh.html) class. See this link for capabilities and engine tutorials. We refer to these meshes as `instances`.
 
@@ -200,7 +200,7 @@ These features can be implemented by having a wind shader or player interaction 
 
 Placing instances via code is possible. See the [Terrain3DInstancer API](../api/class_terrain3dinstancer.rst) for available functions. Also read this and the next section.
 
-One thing you must consider is if it makes sense to use the MultiMesh based instancer, or if it's more efficient to use a particle shader, such as the example included in our `extras/particle_example` directory.
+One thing you must consider is if it makes sense to use the MultiMesh based instancer, or if it's more efficient to use a particle shader, such as the example included in our `demo/particles` directory.
 
 **MultiMesh Pros & Cons:**
 * Designed for hand painting and manual control

@@ -1,6 +1,6 @@
 [gd_resource type="Resource" script_class="Terrain3DLayerBindings" format=3 uid="uid://xa5cemxu647a"]
 
-[ext_resource type="Terrain3DMeshAsset" uid="uid://dfa8iubar0hxj" path="res://addons/terrain_3d/extras/layers/scatter_rock.tres" id="1_v4rjs"]
+[ext_resource type="Terrain3DMeshAsset" uid="uid://dfa8iubar0hxj" path="res://demo/layers/scatter_rock.tres" id="1_v4rjs"]
 [ext_resource type="Script" uid="uid://d37th4uq6vlo2" path="res://addons/terrain_3d/src/layers/terrain_3d_layer_bindings.gd" id="2_ytut3"]
 
 [resource]

@@ -1,6 +1,6 @@
 [gd_resource type="Terrain3DMeshAsset" format=3 uid="uid://cwle1uyt2yp8x"]
 
-[ext_resource type="PackedScene" uid="uid://s6hc1bhw42ki" path="res://addons/terrain_3d/extras/layers/scatter_tree.tscn" id="1_qmfsl"]
+[ext_resource type="PackedScene" uid="uid://s6hc1bhw42ki" path="res://demo/layers/scatter_tree.tscn" id="1_qmfsl"]
 
 [resource]
 name = "Pine role"

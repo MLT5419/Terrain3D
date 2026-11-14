@@ -1,11 +1,11 @@
 [gd_scene format=3 uid="uid://drfbffr7y3per"]
 
 [ext_resource type="Script" uid="uid://d4a1nqme2480" path="res://addons/terrain_3d/src/layers/terrain_3d_stamp.gd" id="1_tgsg4"]
-[ext_resource type="Resource" uid="uid://dae6cww7kct63" path="res://addons/terrain_3d/extras/layers/forest_ground.res" id="2_tpfjg"]
-[ext_resource type="Resource" uid="uid://bv3h3m3d863ie" path="res://addons/terrain_3d/extras/layers/forest_instances.res" id="3_b3c6n"]
+[ext_resource type="Resource" uid="uid://dae6cww7kct63" path="res://demo/layers/forest_ground.res" id="2_tpfjg"]
+[ext_resource type="Resource" uid="uid://bv3h3m3d863ie" path="res://demo/layers/forest_instances.res" id="3_b3c6n"]
 [ext_resource type="Script" uid="uid://gcb62detrtpx" path="res://addons/terrain_3d/src/objects/terrain_3d_instance_slot.gd" id="4_n2x2l"]
-[ext_resource type="Terrain3DMeshAsset" uid="uid://cwle1uyt2yp8x" path="res://addons/terrain_3d/extras/layers/scatter_tree.tres" id="5_ybuvq"]
-[ext_resource type="PackedScene" uid="uid://dkwp0mx68qgf2" path="res://addons/terrain_3d/extras/layers/scatter_cabin.tscn" id="6_yq3uv"]
+[ext_resource type="Terrain3DMeshAsset" uid="uid://cwle1uyt2yp8x" path="res://demo/layers/scatter_tree.tres" id="5_ybuvq"]
+[ext_resource type="PackedScene" uid="uid://dkwp0mx68qgf2" path="res://demo/layers/scatter_cabin.tscn" id="6_yq3uv"]
 [ext_resource type="Script" uid="uid://buauoey8v3lv8" path="res://addons/terrain_3d/src/objects/terrain_3d_attachment_settings.gd" id="7_wydqa"]
 
 [sub_resource type="Resource" id="Resource_hykmd"]
