@@ -3,6 +3,8 @@
 
 Terrain3D supports up to 32 texture sets using albedo, height, normal, and roughness textures, each set are channel packed into 2 files. This page describes everything you need to know to prepare your texture files. Continue on to [Texture Painting](texture_painting.md) to learn how to use them.
 
+Alternatively, select **PBR Material** as a texture layer's Source Mode to import an existing `StandardMaterial3D` or `ORMMaterial3D`, including metallic, independent AO and emission. See [PBR Material Layers](pbr_materials.md) for automatic preprocessing and cache requirements.
+
 **Table of Contents**
 * [Texture Requirements](#texture-format-requirements)
 * [Texture Content](#texture-content)

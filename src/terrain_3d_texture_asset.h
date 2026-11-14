@@ -3,6 +3,8 @@
 #ifndef TERRAIN3D_TEXTURE_CLASS_H
 #define TERRAIN3D_TEXTURE_CLASS_H
 
+#include <godot_cpp/classes/base_material3d.hpp>
+#include <godot_cpp/classes/image.hpp>
 #include <godot_cpp/classes/texture2d.hpp>
 
 #include "constants.h"
@@ -12,6 +14,27 @@ class Terrain3DTextureAsset : public Terrain3DAssetResource {
 	GDCLASS(Terrain3DTextureAsset, Terrain3DAssetResource);
 	CLASS_NAME();
 	friend class Terrain3DAssets;
+
+public:
+	enum SourceMode { SOURCE_TEXTURES,
+		SOURCE_MATERIAL };
+
+private:
+	SourceMode _source_mode = SOURCE_TEXTURES;
+	Ref<BaseMaterial3D> _material;
+	bool _premultiply_ao = false;
+	int _material_texture_size = 1024;
+	TypedArray<Image> _material_cache;
+	String _material_cache_signature;
+	float _material_emission_scale = 1.f;
+	Dictionary _material_settings;
+	uint32_t _material_source_state = 0;
+	bool _runtime_material_cache = false;
+	TypedArray<Texture2D> _material_textures;
+	void _material_changed();
+	void _disconnect_material();
+	void _connect_material_textures();
+	void _poll_material_changes();
 
 	// Saved Data
 	Color _albedo_color = Color(1.f, 1.f, 1.f, 1.f);
@@ -34,9 +57,29 @@ class Terrain3DTextureAsset : public Terrain3DAssetResource {
 
 public:
 	Terrain3DTextureAsset() { clear(); }
-	~Terrain3DTextureAsset() {}
+	~Terrain3DTextureAsset() { _disconnect_material(); }
 	void initialize() override;
 	void clear() override;
+	void set_source_mode(SourceMode p_mode);
+	SourceMode get_source_mode() const { return _source_mode; }
+	void set_material(const Ref<BaseMaterial3D> &p_material);
+	Ref<BaseMaterial3D> get_material() const { return _material; }
+	void set_premultiply_ao(bool p_enabled);
+	bool get_premultiply_ao() const { return _premultiply_ao; }
+	void set_material_texture_size(int p_size);
+	int get_material_texture_size() const { return _material_texture_size; }
+	String get_material_warnings() const;
+	Error bake_material(int p_size = 0);
+	void set_material_cache(const TypedArray<Image> &p_cache) { _material_cache = p_cache; }
+	TypedArray<Image> get_material_cache() const { return _material_cache; }
+	void set_material_cache_signature(const String &p_signature) { _material_cache_signature = p_signature; }
+	String get_material_cache_signature() const { return _material_cache_signature; }
+	void set_material_emission_scale(float p_scale) { _material_emission_scale = p_scale; }
+	float get_material_emission_scale() const { return _material_emission_scale; }
+	void set_material_settings(const Dictionary &p_settings) { _material_settings = p_settings; }
+	Dictionary get_material_settings() const;
+	void set_runtime_material_cache(bool p_enabled) { _runtime_material_cache = p_enabled; }
+	bool get_runtime_material_cache() const { return _runtime_material_cache; }
 
 	void set_asset_name(const String &p_name) override;
 	String get_asset_name() const override { return _name; }
@@ -87,7 +130,10 @@ public:
 	real_t get_detiling_shift() const { return _detiling_shift; }
 
 protected:
+	void _validate_property(PropertyInfo &p_property) const;
 	static void _bind_methods();
 };
+
+VARIANT_ENUM_CAST(Terrain3DTextureAsset::SourceMode);
 
 #endif // TERRAIN3D_TEXTURE_CLASS_H

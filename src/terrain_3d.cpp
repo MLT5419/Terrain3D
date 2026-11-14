@@ -101,6 +101,7 @@ void Terrain3D::__physics_process(const double p_delta) {
 	if (!_initialized) {
 		return;
 	}
+	_assets->poll_material_changes(p_delta);
 	if (!_camera.is_valid()) {
 		LOG(DEBUG, "Camera is null, getting the current one");
 		_grab_camera();

@@ -12,6 +12,8 @@ R"(
 		SPECULAR = 0.;
 		NORMAL_MAP = vec3(0.5, 0.5, 1.0);
 		AO = 1.0;
+		METALLIC = 0.;
+		EMISSION = vec3(0.);
 	}
 
 //INSERT: PBR_TEXTURE_HEIGHT
@@ -22,6 +24,8 @@ R"(
 		SPECULAR = 0.;
 		NORMAL_MAP = vec3(0.5, 0.5, 1.0);
 		AO = 1.0;
+		METALLIC = 0.;
+		EMISSION = vec3(0.);
 	}
 
 //INSERT: PBR_TEXTURE_NORMAL
@@ -32,6 +36,8 @@ R"(
 		SPECULAR = 0.;
 		NORMAL_MAP = vec3(0.5, 0.5, 1.0);
 		AO = 1.0;
+		METALLIC = 0.;
+		EMISSION = vec3(0.);
 	}
 
 //INSERT: PBR_TEXTURE_ROUGHNESS
@@ -42,6 +48,8 @@ R"(
 		SPECULAR = 0.;
 		NORMAL_MAP = vec3(0.5, 0.5, 1.0);
 		AO = 1.0;
+		METALLIC = 0.;
+		EMISSION = vec3(0.);
 	}
 
 //INSERT: PBR_TEXTURE_AO
@@ -52,6 +60,8 @@ R"(
 		SPECULAR = 0.;
 		NORMAL_MAP = vec3(0.5, 0.5, 1.0);
 		AO = 1.0;
+		METALLIC = 0.;
+		EMISSION = vec3(0.);
 	}
 
 //INSERT: OUTPUT_ALBEDO

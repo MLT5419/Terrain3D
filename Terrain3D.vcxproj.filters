@@ -63,6 +63,9 @@
     <ClInclude Include="src\terrain_3d_texture_asset.h">
       <Filter>5. Headers</Filter>
     </ClInclude>
+    <ClInclude Include="src\terrain_3d_material_baker.h">
+      <Filter>5. Headers</Filter>
+    </ClInclude>
     <ClInclude Include="src\terrain_3d_asset_resource.h">
       <Filter>5. Headers</Filter>
     </ClInclude>
@@ -105,6 +108,9 @@
       <Filter>6. C++</Filter>
     </ClCompile>
     <ClCompile Include="src\terrain_3d_material.cpp">
+      <Filter>6. C++</Filter>
+    </ClCompile>
+    <ClCompile Include="src\terrain_3d_material_baker.cpp">
       <Filter>6. C++</Filter>
     </ClCompile>
     <ClCompile Include="src\generated_texture.cpp">
@@ -161,6 +167,9 @@
       <Filter>4. Shaders</Filter>
     </None>
     <None Include="src\shaders\main.glsl">
+      <Filter>4. Shaders</Filter>
+    </None>
+    <None Include="src\shaders\pbr_material.glsl">
       <Filter>4. Shaders</Filter>
     </None>
     <None Include="src\shaders\backgrounds.glsl">

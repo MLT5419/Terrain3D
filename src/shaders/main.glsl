@@ -13,9 +13,8 @@ render_mode blend_mix, depth_draw_opaque, cull_back, diffuse_burley, specular_sc
  * Uniforms that begin with _ are private and will not display in the inspector. However, 
  * you can set them via code. You are welcome to create more of your own hidden uniforms.
  *
- * This system only supports albedo, height, normal, roughness. Most textures don't need the other
- * PBR channels. Height can be used as an approximation for AO. For the rare textures do need
- * additional channels, you can add maps for that one texture. e.g. an emissive map for lava.
+ * Texture layers use the original channel packing. PBR material layers additionally support
+ * independent AO, metallic and emission through editor-baked texture arrays.
  *
  */
 
@@ -76,6 +75,8 @@ uniform highp sampler2DArray _control_maps : repeat_disable;
 uniform highp sampler2DArray _color_maps : source_color, FILTER_METHOD, repeat_disable;
 uniform highp sampler2DArray _texture_array_albedo : source_color, FILTER_METHOD, repeat_enable;
 uniform highp sampler2DArray _texture_array_normal : hint_normal, FILTER_METHOD, repeat_enable;
+//INSERT: PBR_MATERIAL_UNIFORMS
+//INSERT: PBR_MATERIAL_FRAGMENT_UNIFORMS
 uniform vec3 _light_direction = vec3(0., 0., 0);
 uniform vec3 _light_color : source_color = vec3(1.0, 1.0, .735);
 group_uniforms;
@@ -110,6 +111,8 @@ struct material {
 	float ao;
 	float ao_affect;
 	float total_weight;
+	vec3 pbr; // metallic, specular, material-mode weight
+	vec3 emission;
 };
 
 varying vec3 v_vertex;
@@ -268,6 +271,8 @@ vec2 rotate_vec2(const vec2 v, const vec2 cs) {
 	return vec2(fma(cs.x, v.x,  cs.y * v.y), fma(cs.x, v.y, -cs.y * v.x));
 }
 
+//INSERT: PBR_MATERIAL_FRAGMENT_FUNCTIONS
+
 // 2-4 lookups ( 2-6 with dual scaling )
 void accumulate_material(vec3 base_ddx, vec3 base_ddy, const mat3 TNB, const float weight, const ivec3 index,
 			const uint control, const vec2 texture_weight, const ivec2 texture_id, const vec3 i_normal,
@@ -333,15 +338,10 @@ void accumulate_material(vec3 base_ddx, vec3 base_ddy, const mat3 TNB, const flo
 		id_dd.xy = rotate_vec2(id_dd.xy, id_cs_angle);
 		id_dd.zw = rotate_vec2(id_dd.zw, id_cs_angle);
 
-		vec4 alb = textureGrad(_texture_array_albedo, vec3(id_uv, float(id)), id_dd.xy, id_dd.zw);
-		vec4 nrm = textureGrad(_texture_array_normal, vec3(id_uv, float(id)), id_dd.xy, id_dd.zw);
-		alb.rgb *= _texture_color_array[id].rgb;
-		nrm.a = clamp(nrm.a + _texture_roughness_mod_array[id], 0., 1.);
-		// Unpack and rotate normal map.
-		nrm.xyz = fma(nrm.xzy, vec3(2.0), vec3(-1.0));
-		float ao = length(nrm.xyz) * 2.0 - 1.0;
-		ao = mix(ao * ao * _texture_ao_strength_array[id] + 1.0 - _texture_ao_strength_array[id], 1.0, alb.a * alb.a);
-		nrm.xyz = normalize(nrm.xyz);
+		vec4 alb, nrm;
+		float ao;
+		vec3 pbr, emission;
+		sample_terrain_layer(id, id_uv, id_dd, alb, nrm, ao, pbr, emission);
 		nrm.xz = rotate_vec2(nrm.xz, id_cs_angle) * p_align;
 
 //INSERT: DUAL_SCALING_MIX
@@ -353,6 +353,8 @@ void accumulate_material(vec3 base_ddx, vec3 base_ddy, const mat3 TNB, const flo
 		mat.normal_map_depth = fma(_texture_normal_depth_array[id], id_weight, mat.normal_map_depth);
 		mat.ao = fma(ao, id_weight, mat.ao);
 		mat.ao_affect = fma(_texture_ao_affect_array[id], id_weight, mat.ao_affect);
+		mat.pbr = fma(pbr, vec3(id_weight), mat.pbr);
+		mat.emission = fma(emission, vec3(id_weight), mat.emission);
 		mat.total_weight += id_weight;
 	}
 
@@ -380,15 +382,10 @@ void accumulate_material(vec3 base_ddx, vec3 base_ddy, const mat3 TNB, const flo
 		id_dd.xy = rotate_vec2(id_dd.xy, id_cs_angle);
 		id_dd.zw = rotate_vec2(id_dd.zw, id_cs_angle);
 
-		vec4 alb = textureGrad(_texture_array_albedo, vec3(id_uv, float(id)), id_dd.xy, id_dd.zw);
-		vec4 nrm = textureGrad(_texture_array_normal, vec3(id_uv, float(id)), id_dd.xy, id_dd.zw);
-		alb.rgb *= _texture_color_array[id].rgb;
-		nrm.a = clamp(nrm.a + _texture_roughness_mod_array[id], 0., 1.);
-		// Unpack and rotate normal map.
-		nrm.xyz = fma(nrm.xzy, vec3(2.0), vec3(-1.0));
-		float ao = length(nrm.xyz) * 2.0 - 1.0;
-		ao = mix(ao * ao * _texture_ao_strength_array[id] + 1.0 - _texture_ao_strength_array[id], 1.0, alb.a * alb.a);
-		nrm.xyz = normalize(nrm.xyz);
+		vec4 alb, nrm;
+		float ao;
+		vec3 pbr, emission;
+		sample_terrain_layer(id, id_uv, id_dd, alb, nrm, ao, pbr, emission);
 		nrm.xz = rotate_vec2(nrm.xz, id_cs_angle) * p_align;
 
 //INSERT: DUAL_SCALING_MIX
@@ -398,6 +395,8 @@ void accumulate_material(vec3 base_ddx, vec3 base_ddy, const mat3 TNB, const flo
 		mat.normal_map_depth = fma(_texture_normal_depth_array[id], id_weight, mat.normal_map_depth);
 		mat.ao = fma(ao, id_weight, mat.ao);
 		mat.ao_affect = fma(_texture_ao_affect_array[id], id_weight, mat.ao_affect);
+		mat.pbr = fma(pbr, vec3(id_weight), mat.pbr);
+		mat.emission = fma(emission, vec3(id_weight), mat.emission);
 		mat.total_weight += id_weight;
 	}
 }
@@ -609,7 +608,7 @@ void fragment() {
 	}
 
 	// Struct to accumulate all texture data.
-	material mat = material(vec4(0.0), vec4(0.0), 0., 0., 0., 0.);
+	material mat = material(vec4(0.0), vec4(0.0), 0., 0., 0., 0., vec3(0.), vec3(0.));
 
 	// 2 - 4 lookups, 2 - 6 if dual scale texture
 	accumulate_material(base_ddx, base_ddy, TNB, weights[3], index[3], control[3], t_weights[3],
@@ -632,6 +631,8 @@ void fragment() {
 	mat.normal_map_depth *= weight_inv;
 	mat.ao *= weight_inv;
 	mat.ao_affect *= weight_inv;
+	mat.pbr *= weight_inv;
+	mat.emission *= weight_inv;
 
 	vec3 normal_map = fma(normalize(mat.normal_rough.xzy), vec3(0.5), vec3(0.5));
 	float distant_normal_amplifier = clamp(max(length(base_ddx.xz), length(base_ddy.xz)), 1., distant_normal_scale);
@@ -647,9 +648,12 @@ void fragment() {
 	float terrain_facing_light = clamp(dot(w_normal, normalize(_light_direction)), 0.0, 1.0);
 	float specular = 1. - mat.normal_rough.a;
 	specular *= mix(0.0, 1.0, terrain_facing_light);
+	specular = specular * (1. - mat.pbr.z) + mat.pbr.y;
 	specular = clamp(specular + wetness, 0., 1.);
 
 	// Apply PBR
+	METALLIC = clamp(mat.pbr.x, 0., 1.);
+	EMISSION = mat.emission;
 //INSERT: OUTPUT_ALBEDO
 //INSERT: OUTPUT_ALBEDO_GREY
 //INSERT: OUTPUT_ROUGHNESS

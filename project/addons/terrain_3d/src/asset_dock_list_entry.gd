@@ -281,7 +281,7 @@ func _gui_input(p_event: InputEvent) -> void:
 func _can_drop_data(p_at_position: Vector2, p_data: Variant) -> bool:
 	drop_data = false
 	if typeof(p_data) == TYPE_DICTIONARY:
-		if p_data.files.size() == 1:
+		if (p_data.has("files") and p_data.files.size() == 1) or p_data.get("resource") is Resource:
 			queue_redraw()
 			drop_data = true
 	return drop_data
@@ -289,8 +289,15 @@ func _can_drop_data(p_at_position: Vector2, p_data: Variant) -> bool:
 	
 func _drop_data(p_at_position: Vector2, p_data: Variant) -> void:
 	if typeof(p_data) == TYPE_DICTIONARY:
-		var res: Resource = load(p_data.files[0])
-		if res is Texture2D and type == Terrain3DAssets.TYPE_TEXTURE:
+		var res: Resource = p_data.get("resource")
+		if not res and p_data.has("files") and p_data.files.size() == 1:
+			res = load(p_data.files[0])
+		if res is BaseMaterial3D and type == Terrain3DAssets.TYPE_TEXTURE:
+			var ta: Terrain3DTextureAsset = resource.duplicate() if resource is Terrain3DTextureAsset else Terrain3DTextureAsset.new()
+			ta.source_mode = Terrain3DTextureAsset.SOURCE_MATERIAL
+			ta.material = res
+			set_edited_resource(ta, false)
+		elif res is Texture2D and type == Terrain3DAssets.TYPE_TEXTURE:
 			var ta := Terrain3DTextureAsset.new()
 			if resource is Terrain3DTextureAsset:
 				ta.id = resource.id

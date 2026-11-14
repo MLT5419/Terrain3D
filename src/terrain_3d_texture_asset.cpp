@@ -5,6 +5,7 @@
 
 #include "logger.h"
 #include "terrain_3d.h"
+#include "terrain_3d_material_baker.h"
 #include "terrain_3d_texture_asset.h"
 
 ///////////////////////////
@@ -35,10 +36,21 @@ bool Terrain3DTextureAsset::_is_valid_format(const Ref<Texture2D> &p_texture) co
 
 void Terrain3DTextureAsset::initialize() {
 	LOG(INFO, _id, ": ", _name, ": initializing asset");
+	_connect_material_textures();
 }
 
 void Terrain3DTextureAsset::clear() {
 	LOG(INFO, "Clearing TextureAsset");
+	_disconnect_material();
+	_source_mode = SOURCE_TEXTURES;
+	_material.unref();
+	_premultiply_ao = false;
+	_material_texture_size = 1024;
+	_material_cache.clear();
+	_material_cache_signature = String();
+	_material_emission_scale = 1.f;
+	_material_settings.clear();
+	_runtime_material_cache = false;
 	_name = "New Texture";
 	_id = 0;
 	_highlighted = false;
@@ -57,6 +69,185 @@ void Terrain3DTextureAsset::clear() {
 	_uv_scale = 0.1f;
 	_detiling_rotation = 0.0f;
 	_detiling_shift = 0.0f;
+}
+
+void Terrain3DTextureAsset::_disconnect_material() {
+	Callable callback = callable_mp(this, &Terrain3DTextureAsset::_material_changed);
+	if (_material.is_valid() && _material->is_connected("changed", callback)) {
+		_material->disconnect("changed", callback);
+	}
+	for (const Ref<Texture2D> &texture : _material_textures) {
+		if (texture.is_valid() && texture->is_connected("changed", callback)) {
+			texture->disconnect("changed", callback);
+		}
+	}
+	_material_textures.clear();
+}
+
+void Terrain3DTextureAsset::_connect_material_textures() {
+	_disconnect_material();
+	if (_material.is_null()) {
+		return;
+	}
+	Callable callback = callable_mp(this, &Terrain3DTextureAsset::_material_changed);
+	_material->connect("changed", callback);
+	for (int i = 0; i < BaseMaterial3D::TEXTURE_MAX; i++) {
+		Ref<Texture2D> texture = _material->get_texture(BaseMaterial3D::TextureParam(i));
+		if (texture.is_valid() && !_material_textures.has(texture)) {
+			_material_textures.push_back(texture);
+			texture->connect("changed", callback);
+		}
+	}
+}
+
+void Terrain3DTextureAsset::_material_changed() {
+	_connect_material_textures();
+	if (_material.is_valid()) {
+		_material_settings = get_material_settings();
+		_material_source_state = Terrain3DMaterialBaker::source_state(_material);
+	}
+	notify_property_list_changed();
+	if (_source_mode == SOURCE_MATERIAL) {
+		bool pixels_changed = _material_cache.is_empty() || _material.is_null();
+		if (!pixels_changed && IS_EDITOR) {
+			Ref<Image> image = _material_cache[0];
+			pixels_changed = image.is_null() || Terrain3DMaterialBaker::signature(_material, image->get_width(), _premultiply_ao) != _material_cache_signature;
+		}
+		if (pixels_changed) {
+			emit_signal("file_changed");
+		}
+		emit_signal("setting_changed");
+		emit_changed();
+	}
+}
+
+Dictionary Terrain3DTextureAsset::get_material_settings() const {
+	if (_material.is_null()) {
+		return _material_settings;
+	}
+	Dictionary settings;
+	settings["color"] = _material->get_albedo().srgb_to_linear();
+	settings["normal_depth"] = _material->get_normal_scale();
+	settings["ao_affect"] = _material->get_ao_light_affect();
+	settings["specular"] = _material->get_specular();
+	settings["uv_scale"] = _material->get_uv1_scale();
+	settings["uv_offset"] = _material->get_uv1_offset();
+	return settings;
+}
+
+void Terrain3DTextureAsset::_poll_material_changes() {
+	if (_source_mode != SOURCE_MATERIAL || _material.is_null()) {
+		return;
+	}
+	// BaseMaterial3D does not emit changed for every uniform/property setter.
+	// Poll cheap values/texture identities, never image pixels, while authoring.
+	if (Terrain3DMaterialBaker::source_state(_material) != _material_source_state) {
+		_material_changed();
+	} else {
+		Dictionary settings = get_material_settings();
+		if (settings.hash() != _material_settings.hash()) {
+			_material_settings = settings;
+			emit_signal("setting_changed");
+			emit_changed();
+		}
+	}
+}
+
+void Terrain3DTextureAsset::set_source_mode(SourceMode p_mode) {
+	ERR_FAIL_COND(p_mode != SOURCE_TEXTURES && p_mode != SOURCE_MATERIAL);
+	SET_IF_DIFF(_source_mode, p_mode);
+	_thumbnail.unref();
+	if (_source_mode == SOURCE_TEXTURES && _albedo_texture.is_valid()) {
+		_thumbnail = _albedo_texture;
+	}
+	notify_property_list_changed();
+	emit_signal("file_changed");
+	emit_signal("setting_changed");
+	emit_changed();
+}
+
+void Terrain3DTextureAsset::set_material(const Ref<BaseMaterial3D> &p_material) {
+	if (_material == p_material) {
+		return;
+	}
+	_disconnect_material();
+	_material = p_material;
+	if (_material.is_valid() && _name == "New Texture") {
+		String name = _material->get_name();
+		if (name.is_empty()) {
+			name = _material->get_path().get_file().get_basename();
+		}
+		if (!name.is_empty()) {
+			_name = name.left(96);
+		}
+	}
+	// Export customization may copy properties in any order. Clearing a source reference
+	// must not erase a cache that was already copied into the exported resource.
+	if (_material.is_valid()) {
+		_runtime_material_cache = false;
+		_material_cache_signature = String();
+		_material_cache.clear();
+	}
+	_material_changed();
+}
+
+void Terrain3DTextureAsset::set_premultiply_ao(bool p_enabled) {
+	SET_IF_DIFF(_premultiply_ao, p_enabled);
+	_material_changed();
+}
+
+void Terrain3DTextureAsset::set_material_texture_size(int p_size) {
+	ERR_FAIL_COND(p_size < 16 || p_size > 4096 || !Math::is_power_of_2(p_size));
+	SET_IF_DIFF(_material_texture_size, p_size);
+	_material_cache_signature = String();
+	_material_changed();
+}
+
+String Terrain3DTextureAsset::get_material_warnings() const {
+	return Terrain3DMaterialBaker::warnings(_material);
+}
+
+Error Terrain3DTextureAsset::bake_material(int p_size) {
+	ERR_FAIL_COND_V(_material.is_null() && !_runtime_material_cache, ERR_UNCONFIGURED);
+	_material_settings = get_material_settings();
+	int size = p_size == 0 ? _material_texture_size : p_size;
+	ERR_FAIL_COND_V(size < 16 || size > 4096 || !Math::is_power_of_2(size), ERR_INVALID_PARAMETER);
+	bool valid = _material_cache.size() >= 2 && !_material_settings.is_empty();
+	for (const Ref<Image> &image : _material_cache) {
+		valid = valid && image.is_valid() && !image->is_empty() && image->get_size() == Vector2i(size, size) && image->has_mipmaps() && image->get_format() == Image::FORMAT_BPTC_RGBA;
+	}
+	String signature;
+	if (IS_EDITOR && _material.is_valid()) {
+		signature = Terrain3DMaterialBaker::signature(_material, size, _premultiply_ao);
+	} else {
+		// Runtime uses the serialized cache; rebuilding requires editor-only compression.
+		ERR_FAIL_COND_V_MSG(!valid, ERR_UNCONFIGURED, "PBR cache missing. Open and save the Terrain3D assets in the editor before exporting.");
+	}
+	if (!valid || (IS_EDITOR && _material.is_valid() && signature != _material_cache_signature)) {
+		ERR_FAIL_COND_V(_material.is_null(), ERR_UNCONFIGURED);
+		TypedArray<Image> images;
+		float scale = 1.f;
+		Error error = Terrain3DMaterialBaker::bake(_material, size, _premultiply_ao, images, scale);
+		ERR_FAIL_COND_V(error != OK, error);
+		_material_cache = images;
+		_material_emission_scale = scale;
+		_material_cache_signature = signature;
+		emit_changed();
+	}
+	if (IS_EDITOR && _source_mode == SOURCE_MATERIAL && _material_cache.size() >= 2) {
+		Ref<Image> image = _material_cache[0];
+		_thumbnail = ImageTexture::create_from_image(image);
+	}
+	return OK;
+}
+
+void Terrain3DTextureAsset::_validate_property(PropertyInfo &p_property) const {
+	String name = p_property.name;
+	bool legacy = name == "albedo_color" || name == "albedo_texture" || name == "normal_texture" || name == "normal_depth" || name == "ao_strength" || name == "ao_light_affect" || name == "roughness";
+	bool material = name == "material" || name == "premultiply_ao" || name == "material_texture_size" || name == "material_warnings";
+	if ((legacy && _source_mode != SOURCE_TEXTURES) || (material && _source_mode != SOURCE_MATERIAL) || (name == "material_warnings" && get_material_warnings().is_empty())) {
+		p_property.usage &= ~PROPERTY_USAGE_EDITOR;
+	}
 }
 
 void Terrain3DTextureAsset::set_asset_name(const String &p_name) {
@@ -226,6 +417,28 @@ void Terrain3DTextureAsset::_bind_methods() {
 	ADD_SIGNAL(MethodInfo("setting_changed"));
 
 	ClassDB::bind_method(D_METHOD("clear"), &Terrain3DTextureAsset::clear);
+	BIND_ENUM_CONSTANT(SOURCE_TEXTURES);
+	BIND_ENUM_CONSTANT(SOURCE_MATERIAL);
+	ClassDB::bind_method(D_METHOD("set_source_mode", "mode"), &Terrain3DTextureAsset::set_source_mode);
+	ClassDB::bind_method(D_METHOD("get_source_mode"), &Terrain3DTextureAsset::get_source_mode);
+	ClassDB::bind_method(D_METHOD("set_material", "material"), &Terrain3DTextureAsset::set_material);
+	ClassDB::bind_method(D_METHOD("get_material"), &Terrain3DTextureAsset::get_material);
+	ClassDB::bind_method(D_METHOD("set_premultiply_ao", "enabled"), &Terrain3DTextureAsset::set_premultiply_ao);
+	ClassDB::bind_method(D_METHOD("get_premultiply_ao"), &Terrain3DTextureAsset::get_premultiply_ao);
+	ClassDB::bind_method(D_METHOD("set_material_texture_size", "size"), &Terrain3DTextureAsset::set_material_texture_size);
+	ClassDB::bind_method(D_METHOD("get_material_texture_size"), &Terrain3DTextureAsset::get_material_texture_size);
+	ClassDB::bind_method(D_METHOD("get_material_warnings"), &Terrain3DTextureAsset::get_material_warnings);
+	ClassDB::bind_method(D_METHOD("bake_material", "size"), &Terrain3DTextureAsset::bake_material, DEFVAL(0));
+	ClassDB::bind_method(D_METHOD("set_material_cache", "cache"), &Terrain3DTextureAsset::set_material_cache);
+	ClassDB::bind_method(D_METHOD("get_material_cache"), &Terrain3DTextureAsset::get_material_cache);
+	ClassDB::bind_method(D_METHOD("set_material_cache_signature", "signature"), &Terrain3DTextureAsset::set_material_cache_signature);
+	ClassDB::bind_method(D_METHOD("get_material_cache_signature"), &Terrain3DTextureAsset::get_material_cache_signature);
+	ClassDB::bind_method(D_METHOD("set_material_emission_scale", "scale"), &Terrain3DTextureAsset::set_material_emission_scale);
+	ClassDB::bind_method(D_METHOD("get_material_emission_scale"), &Terrain3DTextureAsset::get_material_emission_scale);
+	ClassDB::bind_method(D_METHOD("set_material_settings", "settings"), &Terrain3DTextureAsset::set_material_settings);
+	ClassDB::bind_method(D_METHOD("get_material_settings"), &Terrain3DTextureAsset::get_material_settings);
+	ClassDB::bind_method(D_METHOD("set_runtime_material_cache", "enabled"), &Terrain3DTextureAsset::set_runtime_material_cache);
+	ClassDB::bind_method(D_METHOD("get_runtime_material_cache"), &Terrain3DTextureAsset::get_runtime_material_cache);
 	ClassDB::bind_method(D_METHOD("set_asset_name", "name"), &Terrain3DTextureAsset::set_asset_name);
 	ClassDB::bind_method(D_METHOD("get_asset_name"), &Terrain3DTextureAsset::get_asset_name);
 	ClassDB::bind_method(D_METHOD("set_id", "id"), &Terrain3DTextureAsset::set_id);
@@ -261,6 +474,16 @@ void Terrain3DTextureAsset::_bind_methods() {
 
 	ADD_PROPERTY(PropertyInfo(Variant::STRING, "name", PROPERTY_HINT_NONE), "set_asset_name", "get_asset_name");
 	ADD_PROPERTY(PropertyInfo(Variant::INT, "id", PROPERTY_HINT_NONE), "set_id", "get_id");
+	ADD_PROPERTY(PropertyInfo(Variant::INT, "source_mode", PROPERTY_HINT_ENUM, "Textures,PBR Material"), "set_source_mode", "get_source_mode");
+	ADD_PROPERTY(PropertyInfo(Variant::OBJECT, "material", PROPERTY_HINT_RESOURCE_TYPE, "StandardMaterial3D,ORMMaterial3D"), "set_material", "get_material");
+	ADD_PROPERTY(PropertyInfo(Variant::BOOL, "premultiply_ao"), "set_premultiply_ao", "get_premultiply_ao");
+	ADD_PROPERTY(PropertyInfo(Variant::INT, "material_texture_size", PROPERTY_HINT_ENUM, "256:256,512:512,1024:1024,2048:2048,4096:4096"), "set_material_texture_size", "get_material_texture_size");
+	ADD_PROPERTY(PropertyInfo(Variant::STRING, "material_warnings", PROPERTY_HINT_MULTILINE_TEXT, "", PROPERTY_USAGE_EDITOR | PROPERTY_USAGE_READ_ONLY), "", "get_material_warnings");
+	ADD_PROPERTY(PropertyInfo(Variant::ARRAY, "_material_cache", PROPERTY_HINT_ARRAY_TYPE, "Image", PROPERTY_USAGE_STORAGE), "set_material_cache", "get_material_cache");
+	ADD_PROPERTY(PropertyInfo(Variant::STRING, "_material_cache_signature", PROPERTY_HINT_NONE, "", PROPERTY_USAGE_STORAGE), "set_material_cache_signature", "get_material_cache_signature");
+	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "_material_emission_scale", PROPERTY_HINT_NONE, "", PROPERTY_USAGE_STORAGE), "set_material_emission_scale", "get_material_emission_scale");
+	ADD_PROPERTY(PropertyInfo(Variant::DICTIONARY, "_material_settings", PROPERTY_HINT_NONE, "", PROPERTY_USAGE_STORAGE), "set_material_settings", "get_material_settings");
+	ADD_PROPERTY(PropertyInfo(Variant::BOOL, "_runtime_material_cache", PROPERTY_HINT_NONE, "", PROPERTY_USAGE_STORAGE), "set_runtime_material_cache", "get_runtime_material_cache");
 	ADD_PROPERTY(PropertyInfo(Variant::COLOR, "albedo_color", PROPERTY_HINT_COLOR_NO_ALPHA), "set_albedo_color", "get_albedo_color");
 	ADD_PROPERTY(PropertyInfo(Variant::OBJECT, "albedo_texture", PROPERTY_HINT_RESOURCE_TYPE, "ImageTexture,CompressedTexture2D"), "set_albedo_texture", "get_albedo_texture");
 	ADD_PROPERTY(PropertyInfo(Variant::OBJECT, "normal_texture", PROPERTY_HINT_RESOURCE_TYPE, "ImageTexture,CompressedTexture2D"), "set_normal_texture", "get_normal_texture");
