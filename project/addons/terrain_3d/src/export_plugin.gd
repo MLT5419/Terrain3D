@@ -19,7 +19,7 @@ func _begin_customize_resources(platform: EditorExportPlatform, features: Packed
 	_platform_name = platform.get_os_name()
 	_features = features
 	# Change when the resource layout or export conversion policy changes.
-	_hash = "Terrain3D-layer-bake-v9|" + _platform_name + "|" + "|".join(features)
+	_hash = "Terrain3D-layer-bake-v10-attachments2|" + _platform_name + "|" + "|".join(features)
 	_hash += "|" + str(ProjectSettings.get_setting("rendering/renderer/rendering_method", "gl_compatibility"))
 	_hash += "|" + str(ProjectSettings.get_setting("rendering/renderer/rendering_method.mobile", "mobile"))
 	return true
@@ -57,7 +57,7 @@ func _contains_layers(scene: PackedScene, seen: Dictionary = {}) -> bool:
 			var value: Variant = state.get_node_property_value(node, property)
 			if value is Script:
 				while value:
-					if value.get_global_name() == &"Terrain3DLayer":
+					if value.get_global_name() in [&"Terrain3DLayer", &"Terrain3DAttachmentGroup"]:
 						return true
 					value = value.get_base_script()
 	return false
@@ -71,14 +71,25 @@ func _stage_file(path: String) -> void:
 
 func _customize_scene(scene: Node, path: String) -> Node:
 	var layers: Array[Terrain3DLayer] = []
+	var attachments: Array[Terrain3DAttachmentGroup] = []
+	var terrains: Array[Terrain3D] = []
 	var nodes: Array[Node] = [scene]
 	for node in scene.find_children("*", "", true, false):
 		if node.owner:
 			nodes.append(node)
+	var original_owners := {}
+	var owner_nodes := {}
 	for node in nodes:
+		original_owners[node.get_instance_id()] = node.owner.get_instance_id() if node.owner else 0
+		if node.owner:
+			owner_nodes[node.owner.get_instance_id()] = node.owner
 		if node is Terrain3DLayer:
 			layers.append(node)
-	if layers.is_empty():
+		if node is Terrain3DAttachmentGroup:
+			attachments.append(node)
+		if node is Terrain3D:
+			terrains.append(node)
+	if layers.is_empty() and attachments.is_empty():
 		return null
 	# A real World3D makes the ordinary compositor usable here; it is removed before packing.
 	var view := SubViewport.new()
@@ -93,6 +104,7 @@ func _customize_scene(scene: Node, path: String) -> Node:
 	var manifest := ConfigFile.new()
 	var paths := PackedStringArray()
 	var promoted_hosts: Array[Terrain3D] = []
+	DirAccess.make_dir_recursive_absolute(COOKED_DIRECTORY)
 	for host: Terrain3D in hosts:
 		var stack: Terrain3DLayerStack = host.ensure_layer_stack()
 		stack.exporting = true
@@ -137,21 +149,48 @@ func _customize_scene(scene: Node, path: String) -> Node:
 		paths.append(bake_path)
 		_stage_file(bake_path)
 		_stage_references(bake)
+	# A classic terrain with attachment groups keeps its external region files. Stage
+	# its cooked palette as well, including when Godot reuses this customized scene.
+	for host in terrains:
+		if hosts.has(host):
+			continue
+		var assets := _customize_resource(host.get_source_assets(), "")
+		var asset_path := COOKED_DIRECTORY.path_join("assets_" + (path + str(scene.get_path_to(host)) + _hash).sha256_text() + ".res")
+		if ResourceSaver.save(assets, asset_path, ResourceSaver.FLAG_COMPRESS) != OK:
+			get_export_platform().add_message(EditorExportPlatform.EXPORT_MESSAGE_ERROR, "Terrain3D", "Could not save " + asset_path)
+			continue
+		host.assets = ResourceLoader.load(asset_path, "", ResourceLoader.CACHE_MODE_REPLACE)
+		paths.append(asset_path)
+		_stage_file(asset_path)
+		_stage_references(host.assets)
 	manifest.set_value("layers", "bakes", paths)
 	manifest.save(_layer_manifest(path))
+	for attachment in attachments:
+		attachment.update_attachments(true)
 	var markers: Array[Node3D] = []
-	for layer in layers:
+	var replaced_owners := {}
+	for layer in layers + attachments:
 		# Plain markers preserve node paths/groups without retaining prefab source
 		# dependencies or running authoring scripts in the exported game.
 		var marker := Node3D.new()
 		marker.name = layer.name
 		marker.transform = layer.transform
+		marker.visible = layer.visible
 		markers.append(marker)
+		original_owners[marker.get_instance_id()] = original_owners.get(layer.get_instance_id(), 0)
+		replaced_owners[layer.get_instance_id()] = true
 		layer.replace_by(marker, true)
 		if layer == scene:
 			scene = marker
 		layer.free()
-	for node in nodes + markers + promoted_hosts:
+	for node in nodes + markers:
+		if is_instance_valid(node) and node != scene:
+			var owner_id: int = original_owners.get(node.get_instance_id(), 0)
+			var desired: Node = null if replaced_owners.has(owner_id) else owner_nodes.get(owner_id)
+			# Keep ordinary scene ownership (scripts may use owner). Authoring roots
+			# lose their source scene and their direct owned nodes become scene-owned.
+			node.owner = desired if is_instance_valid(desired) and desired.is_ancestor_of(node) else scene
+	for node in promoted_hosts:
 		if is_instance_valid(node) and node != scene:
 			node.owner = scene
 	view.remove_child(scene)
