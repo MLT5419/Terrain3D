@@ -73,6 +73,9 @@ func _invalidate_branch(node: Node) -> void:
 		return
 	if node is Terrain3DLayer:
 		_invalidate_one(node)
+		for source in layers:
+			if source is Terrain3DGeneratedLayer and source.owner_layer == node:
+				_invalidate_one(source)
 	for child in node.get_children():
 		_invalidate_branch(child)
 
@@ -359,6 +362,10 @@ func recompose(force: bool = false) -> Error:
 	if host.get_collision():
 		host.get_collision().update(Vector2i(2147483647, 2147483647), true)
 	host.snap()
+	if Engine.is_editor_hint():
+		for layer in layers:
+			if not layer is Terrain3DGeneratedLayer:
+				layer.update_gizmos()
 	program_scheduler.accept()
 	scatter.compose(self)
 	composing = false

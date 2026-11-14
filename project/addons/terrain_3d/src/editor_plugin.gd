@@ -8,6 +8,7 @@ extends EditorPlugin
 const Terrain3DUI: Script = preload("res://addons/terrain_3d/src/ui.gd")
 const ExportPlugin: Script = preload("res://addons/terrain_3d/src/export_plugin.gd")
 const ASSET_DOCK: String = "res://addons/terrain_3d/src/asset_dock.tscn"
+const PLACEMENT_SHORTCUTS := ["spatial_editor/tool_transform", "spatial_editor/tool_select", "spatial_editor/tool_move", "spatial_editor/tool_rotate", "spatial_editor/tool_scale"]
 
 # Editor Plugin
 var debug: int = 0 # Set in _edit()
@@ -28,6 +29,8 @@ var program_inspector: EditorInspectorPlugin
 # Terrain
 var terrain: Terrain3D
 var active_layer: Terrain3DLayer
+var layer_placement_mode := true
+var _native_tool_buttons: Array[BaseButton] = []
 var _layer_dock_pending := false
 var _last_terrain: Terrain3D
 var nav_region: NavigationRegion3D
@@ -85,6 +88,7 @@ func _enter_tree() -> void:
 	add_node_3d_gizmo_plugin(layer_gizmo)
 	program_inspector = preload("res://addons/terrain_3d/src/programs/terrain_3d_program_inspector.gd").new()
 	add_inspector_plugin(program_inspector)
+	call_deferred("_bind_native_placement_tools")
 
 
 func _exit_tree() -> void:
@@ -100,6 +104,34 @@ func _exit_tree() -> void:
 	remove_export_plugin(export_plugin)
 	remove_node_3d_gizmo_plugin(layer_gizmo)
 	remove_inspector_plugin(program_inspector)
+	for button in _native_tool_buttons:
+		if is_instance_valid(button) and button.pressed.is_connected(_native_placement_selected):
+			button.pressed.disconnect(_native_placement_selected)
+	_native_tool_buttons.clear()
+
+
+func _bind_native_placement_tools() -> void:
+	# Match the editor's Shortcut resources, rather than translated labels or UI paths.
+	var shortcuts: Array[Shortcut] = []
+	for name: String in PLACEMENT_SHORTCUTS:
+		if editor_settings.has_shortcut(name):
+			shortcuts.append(editor_settings.get_shortcut(name))
+	for button: BaseButton in EditorInterface.get_base_control().find_children("*", "BaseButton", true, false):
+		if button.shortcut and shortcuts.has(button.shortcut) and not button.pressed.is_connected(_native_placement_selected):
+			button.pressed.connect(_native_placement_selected)
+			_native_tool_buttons.append(button)
+
+
+func _native_placement_selected() -> void:
+	if is_instance_valid(active_layer):
+		set_layer_placement_mode(true)
+
+
+func _is_placement_shortcut(event: InputEventKey) -> bool:
+	for name: String in PLACEMENT_SHORTCUTS:
+		if editor_settings.has_shortcut(name) and editor_settings.is_shortcut(name, event):
+			return true
+	return false
 
 
 func _on_godot_focus_entered() -> void:
@@ -158,6 +190,7 @@ func _edit(p_object: Object) -> void:
 		if is_instance_valid(active_layer) and active_layer.layer_changed.is_connected(_layer_assets_changed):
 			active_layer.layer_changed.disconnect(_layer_assets_changed)
 		active_layer = layer
+		layer_placement_mode = true
 		if active_layer:
 			active_layer.layer_changed.connect(_layer_assets_changed)
 		terrain = target
@@ -169,6 +202,7 @@ func _edit(p_object: Object) -> void:
 		editor.set_active_layer(active_layer)
 		terrain.set_meta("_edit_lock_", true)
 		ui.set_visible(true)
+		ui.update_placement_controls()
 
 		# Get alerted when a new asset list is loaded
 		if not terrain.assets_changed.is_connected(asset_dock.update_assets):
@@ -201,6 +235,7 @@ func _clear() -> void:
 	if is_instance_valid(active_layer) and active_layer.layer_changed.is_connected(_layer_assets_changed):
 		active_layer.layer_changed.disconnect(_layer_assets_changed)
 	active_layer = null
+	layer_placement_mode = true
 	if editor:
 		editor.set_active_layer(null)
 	if is_terrain_valid():
@@ -209,6 +244,45 @@ func _clear() -> void:
 		terrain = null
 		editor.set_terrain(null)
 		ui.clear_picking()
+	if is_instance_valid(ui):
+		ui.update_placement_controls()
+
+
+func set_layer_placement_mode(enabled: bool) -> void:
+	if not is_instance_valid(active_layer):
+		return
+	if editor.is_operating():
+		editor.stop_operation()
+	layer_placement_mode = enabled
+	_input_mode = 0
+	ui.clear_picking()
+	ui.hide_decal()
+	ui.update_placement_controls()
+
+
+func focus_layer(camera: Camera3D = null) -> bool:
+	if not is_terrain_valid() or not is_instance_valid(active_layer) or not active_layer.is_transform_valid():
+		return false
+	if not camera:
+		camera = viewport.get_camera_3d() if is_instance_valid(viewport) else EditorInterface.get_editor_viewport_3d(0).get_camera_3d()
+	var scene := EditorInterface.get_edited_scene_root()
+	if not camera or (scene and scene.is_ancestor_of(camera)):
+		return false
+	var bounds := active_layer.source_content_bounds()
+	if not bounds.has_area():
+		bounds = Rect2(active_layer.pivot - Vector2.ONE, Vector2.ONE * 2)
+	var world := active_layer._source_to_world(bounds.get_center())
+	var height := terrain.data.get_height(Vector3(world.x, 0, world.y))
+	if not is_finite(height): height = active_layer.global_position.y
+	var diameter := 1.0
+	for corner in [bounds.position, bounds.end, Vector2(bounds.end.x, bounds.position.y), Vector2(bounds.position.x, bounds.end.y)]:
+		diameter = maxf(diameter, world.distance_to(active_layer._source_to_world(corner)) * 2)
+	var distance := maxf(8, diameter / (2 * tan(deg_to_rad(camera.fov) * 0.5)) * 1.3)
+	camera.global_position = Vector3(world.x, height, world.y) + camera.global_basis.z * distance
+	if camera.projection == Camera3D.PROJECTION_ORTHOGONAL:
+		camera.size = diameter * 1.3
+	terrain.set_camera(camera)
+	return true
 
 func _layer_assets_changed() -> void:
 	if not _layer_dock_pending:
@@ -225,6 +299,23 @@ func _forward_3d_gui_input(p_viewport_camera: Camera3D, p_event: InputEvent) -> 
 	mouse_in_main = true
 	if not is_terrain_valid():
 		return AFTER_GUI_INPUT_PASS
+	terrain.set_camera(p_viewport_camera)
+	viewport = p_viewport_camera.get_parent()
+	if is_instance_valid(active_layer):
+		if p_event is InputEventKey and p_event.pressed and not p_event.echo and _is_placement_shortcut(p_event):
+			set_layer_placement_mode(true)
+			return AFTER_GUI_INPUT_PASS
+		if p_event is InputEventKey and p_event.pressed and not p_event.echo and not (p_event.ctrl_pressed or p_event.meta_pressed or p_event.alt_pressed):
+			if p_event.keycode == KEY_F or p_event.physical_keycode == KEY_F:
+				if focus_layer(p_viewport_camera): return AFTER_GUI_INPUT_STOP
+		# Godot owns selection and transform shortcuts, including while a brush is selected.
+		if p_event is InputEventKey and p_event.pressed and not p_event.echo and not (p_event.ctrl_pressed or p_event.meta_pressed or p_event.alt_pressed):
+			if p_event.keycode in [KEY_Q, KEY_W, KEY_E, KEY_R] or p_event.physical_keycode in [KEY_Q, KEY_W, KEY_E, KEY_R]:
+				set_layer_placement_mode(true)
+		if EditorInterface.get_selection().get_selected_nodes().size() != 1 and not layer_placement_mode:
+			set_layer_placement_mode(true)
+		if layer_placement_mode:
+			return AFTER_GUI_INPUT_PASS
 
 	var continue_input: AfterGUIInput = _read_input(p_event)
 	if continue_input != AFTER_GUI_INPUT_CUSTOM:

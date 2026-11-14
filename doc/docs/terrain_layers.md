@@ -9,12 +9,22 @@ Open `demo/layers/layers_demo.tscn` for a working example. It instances an indep
 
 1. Add a `Terrain3DPaintLayer` beneath an existing `Terrain3D`, or create a scene whose root is `Terrain3DPaintLayer` or `Terrain3DStamp`.
 2. Use **Create Layer Data**, then save its `Terrain3DLayerData` resource as an external `.res` file. Embedded data is also supported.
-3. Select the layer in the Scene tree. The terrain toolbar edits that layer. Add material entries through its Asset Dock or configure its **Slots** in the Inspector.
+3. Select the layer in the Scene tree. It starts in **Transform** mode for placement. Click **Paint** or a terrain brush to edit that layer. Add material entries through its Asset Dock or configure its **Slots** in the Inspector.
 4. Save the layer scene and its external resources. Instance that scene beneath the destination Terrain3D.
 
 Nodes are processed in Scene tree order, from earlier contributions to later contributions. Wrapper nodes are traversed; another Terrain3D starts a separate composition context. **Enabled** controls participation of the layer and its descendants, **Locked** prevents brush editing, and **Erase Mode** removes this layer's coverage to reveal the layers below. The Node3D visibility switch is not the layer enable switch.
 
-The parent owns vertex spacing, region size, mesh LODs, collision and terrain material settings. Fixed-grid paint layers use terrain/world coordinates and keep an identity transform. Use a Stamp for movable content. Region resizing is unavailable while edit layers are active; detach the layers before reslicing the base.
+The parent owns vertex spacing, region size, mesh LODs, collision and terrain material settings. Layers and Stamps keep their original source grids and use their Node3D transforms for placement. Existing identity-transform paint layers retain their previous placement. Region resizing is unavailable while edit layers are active; detach the layers before reslicing the base.
+
+## Place layers in the 3D viewport
+
+Select a Layer or Stamp and use Godot's standard move, rotate and scale gizmos, toolbar buttons, snapping and local/global axes. The usual W/E/R shortcuts select these tools, including when leaving Paint mode. The plugin also follows remapped editor transform shortcuts. Q returns to Godot's combined transform tool. Undo/redo uses the editor's normal node transform history.
+
+**Transform** leaves viewport selection and dragging to Godot. **Paint**, or clicking a terrain brush, enables terrain strokes. Selecting Godot's own transform toolbar buttons returns to Transform mode automatically. The terrain body's existing painting shortcuts are unchanged.
+
+The **Focus** button, or F while editing a layer, frames its terrain footprint instead of only the node origin. **Center Pivot** moves the horizontal placement origin to the source bounds without moving the terrain or ordinary child objects. Program-only layers use their enabled program bounds for selection and centering. Layer outlines follow the visible terrain; attachment containers show their contact footprints.
+
+Both ordinary paint layers and Stamps support translation, Y rotation and nonzero scale. X/Z tilt is not a valid heightfield transform and produces a configuration warning. A Stamp additionally provides heightmap capture/import, Height Scale and Reference Height. Old automatic paint-layer locks are removed once when loading; locks subsequently applied with Godot's Lock command remain respected. The Layer **Locked** property continues to prevent brush strokes.
 
 ## Height composition
 
@@ -29,7 +39,7 @@ The compositor works in affected 32-sample tiles and uploads the affected terrai
 
 ## Stamps, pivots and source data
 
-`Terrain3DStamp` stores its content in local coordinates. Position, Y rotation, nonzero X/Z scaling, Y scaling and **Height Scale** affect its contribution. X/Z tilt is rejected because a general rotated surface cannot always be represented by a single height per horizontal position. Painting transforms the brush into source coordinates.
+Layers and `Terrain3DStamp` store their content in source coordinates. Position, Y rotation, nonzero X/Z scaling and Y scaling affect placement; a Stamp also has **Height Scale**. X/Z tilt is rejected because a general rotated surface cannot always be represented by a single height per horizontal position. Painting transforms the brush into source coordinates.
 
 The **Pivot** is measured in source meters. It is independent from **Reference Height**, the source elevation subtracted before height scaling. For example, a mountain with elevations 100–130 can use a reference height of 100 to contribute 0–30 meters. Node Y position adds a masked height offset. No second floating surface is created.
 

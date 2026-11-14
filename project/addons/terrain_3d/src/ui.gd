@@ -60,6 +60,9 @@ var _selected_tool: Terrain3DEditor.Tool = Terrain3DEditor.TOOL_MAX
 var active_operation: Terrain3DEditor.Operation = Terrain3DEditor.OP_MAX
 var _selected_operation: Terrain3DEditor.Operation = Terrain3DEditor.OP_MAX
 var inverted_input: bool = false
+var placement_controls: HBoxContainer
+var placement_button: Button
+var paint_button: Button
 
 # 3 Editor decals: 0 = cursor, 1 = slope point1, 2 = slope point2
 var mat_rid: RID
@@ -105,6 +108,39 @@ func _enter_tree() -> void:
 	plugin.add_control_to_container(EditorPlugin.CONTAINER_SPATIAL_EDITOR_SIDE_LEFT, toolbar)
 	plugin.add_control_to_container(EditorPlugin.CONTAINER_SPATIAL_EDITOR_BOTTOM, tool_settings)
 	plugin.add_control_to_container(EditorPlugin.CONTAINER_SPATIAL_EDITOR_MENU, terrain_menu)
+	placement_controls = HBoxContainer.new()
+	placement_controls.name = "TerrainLayerPlacement"
+	var group := ButtonGroup.new()
+	placement_button = Button.new()
+	placement_button.name = "PlaceLayer"
+	placement_button.text = "Transform"
+	placement_button.tooltip_text = "Move, rotate and scale with Godot's standard gizmo (W/E/R). Q selects the combined transform tool."
+	placement_button.toggle_mode = true
+	placement_button.button_group = group
+	placement_button.pressed.connect(func(): plugin.set_layer_placement_mode(true))
+	placement_controls.add_child(placement_button)
+	paint_button = Button.new()
+	paint_button.name = "PaintLayer"
+	paint_button.text = "Paint"
+	paint_button.tooltip_text = "Paint the selected layer. Clicking a terrain brush also enters Paint mode. W/E/R returns to placement."
+	paint_button.toggle_mode = true
+	paint_button.button_group = group
+	paint_button.pressed.connect(func(): plugin.set_layer_placement_mode(false))
+	placement_controls.add_child(paint_button)
+	var focus_button := Button.new()
+	focus_button.text = "Focus"
+	focus_button.tooltip_text = "Frame the layer's visible terrain footprint (F)."
+	focus_button.pressed.connect(func(): plugin.focus_layer())
+	placement_controls.add_child(focus_button)
+	var pivot_button := Button.new()
+	pivot_button.text = "Center Pivot"
+	pivot_button.tooltip_text = "Center the placement origin while keeping terrain and child objects in place."
+	pivot_button.pressed.connect(func():
+		if is_instance_valid(plugin.active_layer): plugin.active_layer.center_pivot()
+	)
+	placement_controls.add_child(pivot_button)
+	placement_controls.hide()
+	plugin.add_control_to_container(EditorPlugin.CONTAINER_SPATIAL_EDITOR_MENU, placement_controls)
 
 	_on_tool_changed(Terrain3DEditor.REGION, Terrain3DEditor.ADD)
 	
@@ -122,6 +158,8 @@ func _exit_tree() -> void:
 		print("Terrain3DUI: _exit_tree()")
 	plugin.remove_control_from_container(EditorPlugin.CONTAINER_SPATIAL_EDITOR_SIDE_LEFT, toolbar)
 	plugin.remove_control_from_container(EditorPlugin.CONTAINER_SPATIAL_EDITOR_BOTTOM, tool_settings)
+	plugin.remove_control_from_container(EditorPlugin.CONTAINER_SPATIAL_EDITOR_MENU, placement_controls)
+	placement_controls.queue_free()
 	toolbar.queue_free()
 	tool_settings.queue_free()
 	terrain_menu.queue_free()
@@ -143,6 +181,7 @@ func set_visible(p_visible: bool, p_menu_only: bool = false) -> void:
 		toolbar.set_visible(p_visible)
 		tool_settings.set_visible(p_visible)
 		live_info_panel.set_visible(p_visible)
+	update_placement_controls(p_menu_only)
 
 	if plugin.editor and plugin.terrain and p_visible:
 			await get_tree().process_frame # Won't work, otherwise
@@ -151,6 +190,21 @@ func set_visible(p_visible: bool, p_menu_only: bool = false) -> void:
 			_on_tool_changed(_selected_tool, _selected_operation)
 			if _selected_tool in [ Terrain3DEditor.REGION, Terrain3DEditor.NAVIGATION ]:
 				plugin.terrain.material.update(Terrain3DMaterial.FULL_REBUILD)
+
+
+func update_placement_controls(menu_only: bool = false) -> void:
+	if not is_instance_valid(placement_controls):
+		return
+	var layer_selected := is_instance_valid(plugin.active_layer)
+	placement_controls.visible = visible and not menu_only and layer_selected
+	placement_button.set_pressed_no_signal(plugin.layer_placement_mode)
+	paint_button.set_pressed_no_signal(not plugin.layer_placement_mode)
+	tool_settings.visible = visible and not menu_only and not (layer_selected and plugin.layer_placement_mode)
+	if layer_selected:
+		# A layer cannot create native base regions. Start with a useful layer brush.
+		if _selected_tool == Terrain3DEditor.REGION:
+			toolbar.get_button("Raise").set_pressed_no_signal(true)
+			_on_tool_changed(Terrain3DEditor.SCULPT, Terrain3DEditor.ADD)
 
 	
 func set_menu_visibility(p_list: Control, p_visible: bool) -> void:
@@ -364,7 +418,7 @@ func update_decal() -> void:
 	
 	# If not a state that should show the decal, hide everything and return
 	mat_rid = plugin.terrain.material.get_material_rid() # Used in hide_decal() and below
-	if not visible or \
+	if not visible or (is_instance_valid(plugin.active_layer) and plugin.layer_placement_mode) or \
 		plugin._input_mode == -1 or \
 		# After moving camera, wait for mouse cursor to update before revealing
 		# See https://github.com/godotengine/godot/issues/70098
@@ -575,6 +629,9 @@ func is_shader_valid() -> bool:
 func hide_decal() -> void:
 	editor_decal_visible = [false, false, false]
 	if is_shader_valid():
+		mat_rid = plugin.terrain.material.get_material_rid()
+		if not mat_rid.is_valid():
+			return
 		var r_map: PackedInt32Array = plugin.terrain.data.get_region_map()
 		RenderingServer.material_set_param(mat_rid, "_editor_decal_visible", editor_decal_visible)
 		RenderingServer.material_set_param(mat_rid, "_region_map", r_map)

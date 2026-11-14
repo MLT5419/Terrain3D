@@ -55,6 +55,8 @@ func _process(delta: float) -> void:
 	if not Engine.is_editor_hint() and _solved_once and not runtime_follow:
 		return
 	update_attachments()
+	if Engine.is_editor_hint():
+		update_gizmos()
 
 func _notification(what: int) -> void:
 	if what == NOTIFICATION_EDITOR_PRE_SAVE:
@@ -162,18 +164,10 @@ func _apply_record(id: String, record: Dictionary, local: Transform3D) -> void:
 		solved_transforms[id] = local
 	source.emit_changed()
 
-func _record_manual_edit(id: String, target: Node3D, policy: Terrain3DAttachmentSettings) -> void:
+func _record_manual_edit(id: String, target: Node3D) -> void:
 	var old: Dictionary = source.records[id].duplicate(true)
 	var previous: Transform3D = _last_applied.get(id, target.transform)
-	var record: Dictionary = old.duplicate(true)
-	var rest: Transform3D = old.rest
-	rest.origin = target.transform.origin
-	# Apply the user's change to the source basis, excluding the solver's scale/tilt.
-	rest.basis = target.transform.basis * previous.basis.inverse() * rest.basis
-	record.rest = rest
-	var parent := target.get_parent_node_3d()
-	var delta := target.transform.origin - previous.origin
-	record.offset += (parent.global_basis * delta).y if parent and not target.top_level else delta.y
+	var record := _edited_record(id, target)
 	source.records[id] = record
 	if Engine.is_editor_hint() and _host:
 		var plugin := _host.get_plugin()
@@ -181,13 +175,28 @@ func _record_manual_edit(id: String, target: Node3D, policy: Terrain3DAttachment
 			var history: EditorUndoRedoManager = plugin.get_undo_redo()
 			var undo := history.get_history_undo_redo(history.get_object_history_id(self))
 			var title := undo.get_current_action_name() if undo else ""
-			if title not in ["Translate", "Rotate", "Scale", "Transform"]:
+			if title.is_empty():
 				title = "Transform Surface Attachment"
 			history.create_action(title, UndoRedo.MERGE_ALL, self)
 			history.add_undo_method(self, &"_apply_record", id, old, previous)
 			history.add_do_method(self, &"_apply_record", id, record.duplicate(true), target.transform)
 			history.commit_action(false)
 	source.emit_changed()
+	if terrain_interaction and _host and _host.get_layer_stack():
+		_host.get_layer_stack().invalidate()
+
+func _edited_record(id: String, target: Node3D) -> Dictionary:
+	var record: Dictionary = source.records[id].duplicate(true)
+	var previous: Transform3D = _last_applied.get(id, target.transform)
+	var rest: Transform3D = record.rest
+	rest.origin = target.transform.origin
+	# Apply the user's change to the source basis, excluding the solver's scale/tilt.
+	rest.basis = target.transform.basis * previous.basis.inverse() * rest.basis
+	record.rest = rest
+	var parent := target.get_parent_node_3d()
+	var delta := target.transform.origin - previous.origin
+	record.offset += (parent.global_basis * delta).y if parent and not target.top_level else delta.y
+	return record
 
 func update_attachments(force: bool = false) -> void:
 	if _solving or not is_inside_tree() or _blocked() or not settings or not source:
@@ -221,7 +230,7 @@ func update_attachments(force: bool = false) -> void:
 			source.records[id] = _capture(target, policy, preserve)
 			changed = true
 		elif _last_applied.has(id) and not target.transform.is_equal_approx(_last_applied[id]):
-			_record_manual_edit(id, target, policy)
+			_record_manual_edit(id, target)
 			changed = true
 		if not changed:
 			continue

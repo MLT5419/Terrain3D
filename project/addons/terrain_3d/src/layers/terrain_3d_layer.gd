@@ -9,6 +9,13 @@ enum InstanceMode { ADD, MASK_LOWER, REPLACE }
 signal layer_changed
 @export var programs: Array[Terrain3DProgramSlot] = []
 @export_tool_button("Regenerate Programs") var regenerate_programs_action: Callable = regenerate_programs
+## Source-space placement origin. Center Pivot preserves the terrain and child placement.
+@export var pivot := Vector2.ZERO:
+	set(value):
+		pivot = value
+		_changed()
+@export_tool_button("Center Pivot") var center_action: Callable = center_pivot
+@export_storage var _placement_editor_version := 0
 
 ## Source maps. Save externally for collaboration; Make Data Unique before editing an independent copy.
 @export var data: Terrain3DLayerData:
@@ -91,8 +98,12 @@ func _init() -> void:
 	instance_placement.mode = Terrain3DAttachmentSettings.Mode.SNAP
 
 func _ready() -> void:
-	if not uses_local_transform():
-		set_meta("_edit_lock_", true)
+	# Older paint layers were locked automatically. Migrate that lock once; later
+	# locks applied with Godot's own Lock command remain under the user's control.
+	if _placement_editor_version == 0:
+		if not self is Terrain3DStamp and has_meta("_edit_lock_"):
+			remove_meta("_edit_lock_")
+		_placement_editor_version = 1
 	set_notify_transform(true)
 	set_process(true)
 	_ensure_host()
@@ -109,7 +120,7 @@ func _process(delta: float) -> void:
 		return
 	_poll_time = 0.0
 	_ensure_host()
-	var state := hash([slots, bindings.fingerprint() if bindings else 0, enabled, get_index(), global_transform, height_mode, height_opacity, paint_enabled, instance_mode, instance_opacity, mask_keys, mask_categories, instance_placement.fingerprint() if instance_placement else 0, scatter_data])
+	var state := hash([slots, bindings.fingerprint() if bindings else 0, enabled, get_index(), height_mode, height_opacity, paint_enabled, instance_mode, instance_opacity, mask_keys, mask_categories, instance_placement.fingerprint() if instance_placement else 0, scatter_data])
 	for slot in slots:
 		if slot:
 			state = hash([state, slot.key, slot.default_resource, slot.preview_resource])
@@ -126,7 +137,13 @@ func regenerate_programs() -> void:
 
 func _notification(what: int) -> void:
 	if what == NOTIFICATION_TRANSFORM_CHANGED:
-		_changed()
+		# Moving a node changes its placement, not its palette or source counts.
+		if is_inside_tree():
+			update_configuration_warnings()
+			update_gizmos()
+			var host := get_terrain()
+			if host and host.get_layer_stack():
+				host.get_layer_stack().invalidate_layer(self)
 	elif what == NOTIFICATION_EDITOR_PRE_SAVE:
 		var host := get_terrain()
 		if host and host.get_layer_stack():
@@ -241,22 +258,33 @@ func _ensure_host() -> void:
 			call_deferred("_ensure_host")
 
 func source_position(world: Vector2) -> Vector2:
-	return world
+	return planar_transform().affine_inverse() * world + pivot if is_transform_valid() else Vector2(INF, INF)
 
 func is_transform_valid() -> bool:
-	return (global_transform if is_inside_tree() else transform) == Transform3D.IDENTITY
+	var basis := (global_transform if is_inside_tree() else transform).basis
+	return absf(basis.x.y) < 0.00001 and absf(basis.z.y) < 0.00001 and absf(basis.y.x) < 0.00001 and absf(basis.y.z) < 0.00001 and absf(basis.y.y) > 0.00001 and absf(planar_transform().determinant()) > 0.00001
 
 func uses_local_transform() -> bool:
-	return false
+	return true
+
+func planar_transform() -> Transform2D:
+	var pose := global_transform if is_inside_tree() else transform
+	return Transform2D(Vector2(pose.basis.x.x, pose.basis.x.z), Vector2(pose.basis.z.x, pose.basis.z.z), Vector2(pose.origin.x, pose.origin.z))
 
 func source_bounds() -> Rect2:
-	return data.get_bounds() if data else Rect2()
+	if not data or not is_transform_valid():
+		return Rect2()
+	var bounds := data.get_bounds().grow(data.spacing)
+	var result := Rect2(_source_to_world(bounds.position), Vector2.ZERO)
+	for corner in [bounds.end, Vector2(bounds.position.x, bounds.end.y), Vector2(bounds.end.x, bounds.position.y)]:
+		result = result.expand(_source_to_world(corner))
+	return result
 
 func height_value(source: float) -> float:
-	return source
+	return source * global_basis.y.y + global_position.y
 
 func source_height(value: float) -> float:
-	return value
+	return (value - global_position.y) / global_basis.y.y
 
 func resolve_slot(index: int, preview: bool = false) -> Terrain3DTextureAsset:
 	if index < 0 or index >= slots.size() or not slots[index]:
@@ -331,6 +359,18 @@ func source_content_bounds() -> Rect2:
 	if scatter_data:
 		var instances := scatter_data.get_bounds()
 		result = result.merge(instances) if result.has_area() else instances
+	var configurations: Array = programs.duplicate()
+	for index in slots.size():
+		if not slots[index]:
+			continue
+		configurations.append_array(slots[index].programs)
+		if slots[index].programs.is_empty() and slots[index].inherit_asset_programs:
+			var asset := resolve_slot(index, is_instance_valid(_preview_host))
+			if asset:
+				configurations.append_array(asset.programs)
+	for slot: Terrain3DProgramSlot in configurations:
+		if slot and slot.enabled and slot.bounds.has_area():
+			result = result.merge(slot.bounds) if result.has_area() else slot.bounds
 	return result
 
 func create_instance_data() -> void:
@@ -354,9 +394,43 @@ func create_data() -> void:
 		commit_configuration("Create Terrain Layer Data", {"data": null}, {"data": created})
 
 func apply_configuration(properties: Dictionary) -> void:
+	var children: Dictionary = properties.get("_pivot_children", {})
 	for property: String in properties:
-		set(property, properties[property])
+		if property != "_pivot_children":
+			set(property, properties[property])
+	for path: NodePath in children:
+		var child := get_node_or_null(path) as Node3D
+		if child:
+			var pose: Transform3D = children[path]
+			var delta := pose.origin - child.transform.origin
+			child.transform = pose
+			if child is Terrain3DAttachmentGroup:
+				child.rebase_authored_origin(delta)
 	_changed()
+
+func _pivot_children(delta: Vector2 = Vector2.ZERO) -> Dictionary:
+	var result := {}
+	for child in get_children():
+		if child is Node3D and not child.top_level:
+			var pose: Transform3D = child.transform
+			pose.origin += Vector3(delta.x, 0, delta.y)
+			result[get_path_to(child)] = pose
+	return result
+
+func set_pivot_preserving_position(value: Vector2) -> void:
+	var delta := value - pivot
+	var pose := global_transform
+	pose.origin += pose.basis * Vector3(delta.x, 0, delta.y)
+	apply_configuration({"pivot": value, "global_transform": pose, "_pivot_children": _pivot_children(-delta)})
+
+func center_pivot() -> void:
+	var bounds := source_content_bounds()
+	if bounds.has_area():
+		var centered := bounds.get_center()
+		var pose := global_transform
+		var delta := centered - pivot
+		pose.origin += pose.basis * Vector3(delta.x, 0, delta.y)
+		commit_configuration("Center Terrain Layer Pivot", {"pivot": pivot, "global_transform": global_transform, "_pivot_children": _pivot_children()}, {"pivot": centered, "global_transform": pose, "_pivot_children": _pivot_children(-delta)})
 
 func commit_configuration(title: String, before: Dictionary, after: Dictionary) -> void:
 	var host := get_terrain()
@@ -398,7 +472,7 @@ func begin_operation(tool: int, operation: int) -> bool:
 	return true
 
 func _source_to_world(source: Vector2) -> Vector2:
-	return source
+	return planar_transform() * (source - pivot)
 
 func paint_brush(position_world: Vector3, camera_angle: float, brush: Dictionary, tool: int, operation: int) -> void:
 	if tool == Terrain3DEditor.INSTANCER:
@@ -527,8 +601,8 @@ func _get_configuration_warnings() -> PackedStringArray:
 	var result := PackedStringArray()
 	if not data and not scatter_data and not programs.any(func(slot: Terrain3DProgramSlot): return slot and slot.enabled):
 		result.append("Assign a Terrain3DLayerData resource before painting or importing heights.")
-	if not uses_local_transform() and not is_transform_valid():
-		result.append("Paint layers use the terrain grid. Use Terrain3DStamp for movable content.")
+	if not is_transform_valid():
+		result.append("Terrain layers support movement, Y rotation and nonzero scale. X/Z tilt cannot be represented by a heightfield.")
 	var keys := {}
 	for slot in slots:
 		if not slot or slot.key.is_empty() or keys.has(slot.key):
