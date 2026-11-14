@@ -146,6 +146,8 @@ func show_add_buttons(p_enable: bool) -> void:
 
 
 func _on_tool_selected(p_button: BaseButton) -> void:
+	if is_instance_valid(plugin.active_layer):
+		plugin.set_layer_placement_mode(false)
 	if plugin.debug:
 		print("Terrain3DToolbar: _on_tool_selected: ", p_button)
 	# Select same tool on negative bar

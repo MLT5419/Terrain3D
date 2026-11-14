@@ -62,7 +62,6 @@ top_level = true
 metadata/_edit_lock_ = true
 
 [node name="Ground" parent="Terrain" unique_id=1870966017 instance=ExtResource("1_hakox")]
-metadata/_edit_lock_ = true
 
 [node name="StoneHill" parent="Terrain" unique_id=19965711 instance=ExtResource("2_u6rlq")]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -10, 0, -5)

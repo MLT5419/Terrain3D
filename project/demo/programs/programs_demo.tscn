@@ -171,7 +171,6 @@ programs = Array[ExtResource("3_n7c7a")]([SubResource("Resource_6f2n4")])
 slots = Array[ExtResource("5_0pblf")]([SubResource("Resource_xbk4s"), SubResource("Resource_w3ki0")])
 instance_slots = Array[ExtResource("4_v0tj5")]([SubResource("Resource_4asug")])
 instance_placement = SubResource("Resource_bc444")
-metadata/_edit_lock_ = true
 
 [node name="Foundation" type="Node3D" parent="Terrain" unique_id=1571802524]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -5, 7, 2)

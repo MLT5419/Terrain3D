@@ -112,7 +112,8 @@ static func authoring_pose(node: Node3D) -> Transform3D:
 			for id: String in group._targets():
 				var target: Node3D = group._targets()[id]
 				if (target == node or target.is_ancestor_of(node)) and group.source and group.source.records.has(id):
-					var rest := group._authored(target, group.source.records[id].rest, group._policy(target))
+					var local: Transform3D = group._edited_record(id, target).rest if group._is_editing(target) else group.source.records[id].rest
+					var rest := group._authored(target, local, group._policy(target))
 					return rest * target.global_transform.affine_inverse() * node.global_transform
 		current = current.get_parent()
 	return node.global_transform
