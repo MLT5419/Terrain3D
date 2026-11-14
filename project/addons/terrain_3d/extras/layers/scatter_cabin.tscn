@@ -1,0 +1,52 @@
+[gd_scene format=3 uid="uid://dkwp0mx68qgf2"]
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_osasy"]
+albedo_color = Color(0.6431373, 0.47843137, 0.3019608, 1)
+roughness = 0.85
+
+[sub_resource type="BoxMesh" id="BoxMesh_xqdmd"]
+size = Vector3(3.6, 2.2, 3.2)
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_ss12v"]
+albedo_color = Color(0.3137255, 0.23137255, 0.19607843, 1)
+roughness = 0.85
+
+[sub_resource type="BoxMesh" id="BoxMesh_avgka"]
+size = Vector3(4.4, 0.3, 3.8)
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_s6ntc"]
+albedo_color = Color(0.3647059, 0.20784314, 0.1254902, 1)
+roughness = 0.85
+
+[sub_resource type="BoxMesh" id="BoxMesh_4fj1q"]
+size = Vector3(1, 0.15, 0.8)
+
+[sub_resource type="BoxShape3D" id="BoxShape3D_06fvk"]
+size = Vector3(3.6, 2.2, 3.2)
+
+[node name="Cabin" type="Node3D" unique_id=1082879677]
+
+[node name="Walls" type="MeshInstance3D" parent="." unique_id=1172071500]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1.1, 0)
+material_override = SubResource("StandardMaterial3D_osasy")
+mesh = SubResource("BoxMesh_xqdmd")
+
+[node name="Roof" type="MeshInstance3D" parent="." unique_id=1184916173]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 2.35, 0)
+material_override = SubResource("StandardMaterial3D_ss12v")
+mesh = SubResource("BoxMesh_avgka")
+
+[node name="Furniture" type="Node3D" parent="." unique_id=520873721]
+
+[node name="Table" type="MeshInstance3D" parent="Furniture" unique_id=992501967]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.8, 0)
+material_override = SubResource("StandardMaterial3D_s6ntc")
+mesh = SubResource("BoxMesh_4fj1q")
+
+[node name="Collision" type="StaticBody3D" parent="." unique_id=1871289993]
+
+[node name="@CollisionShape3D@18606" type="CollisionShape3D" parent="Collision" unique_id=703157136]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1.1, 0)
+shape = SubResource("BoxShape3D_06fvk")
+
+[node name="GroundAnchor" type="Marker3D" parent="." unique_id=1280913575]

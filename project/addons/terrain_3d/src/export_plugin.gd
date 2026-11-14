@@ -19,7 +19,7 @@ func _begin_customize_resources(platform: EditorExportPlatform, features: Packed
 	_platform_name = platform.get_os_name()
 	_features = features
 	# Change when the resource layout or export conversion policy changes.
-	_hash = "Terrain3D-layer-bake-v10-attachments2|" + _platform_name + "|" + "|".join(features)
+	_hash = "Terrain3D-layer-bake-v13|" + _platform_name + "|" + "|".join(features)
 	_hash += "|" + str(ProjectSettings.get_setting("rendering/renderer/rendering_method", "gl_compatibility"))
 	_hash += "|" + str(ProjectSettings.get_setting("rendering/renderer/rendering_method.mobile", "mobile"))
 	return true
@@ -104,6 +104,7 @@ func _customize_scene(scene: Node, path: String) -> Node:
 	var manifest := ConfigFile.new()
 	var paths := PackedStringArray()
 	var promoted_hosts: Array[Terrain3D] = []
+	var promoted_scenes: Array[Node] = []
 	DirAccess.make_dir_recursive_absolute(COOKED_DIRECTORY)
 	for host: Terrain3D in hosts:
 		var stack: Terrain3DLayerStack = host.ensure_layer_stack()
@@ -111,7 +112,7 @@ func _customize_scene(scene: Node, path: String) -> Node:
 		if stack.recompose(true) != OK:
 			# A slot-only prefab is an authoring template. Its placed instances are baked
 			# in their enclosing scene with that instance's bindings, never preview assets.
-			if host.has_meta("_terrain3d_preview_owner") and not stack.errors.is_empty() and Array(stack.errors).all(func(message: String): return message.contains("no material bound")):
+			if host.has_meta("_terrain3d_preview_owner") and not stack.errors.is_empty() and Array(stack.errors).all(func(message: String): return message.contains("no material bound") or message.contains("no instance resource bound")):
 				var template: Node = instance_from_id(host.get_meta("_terrain3d_preview_owner"))
 				template.set_meta("_terrain3d_layer_template", true)
 				get_export_platform().add_message(EditorExportPlatform.EXPORT_MESSAGE_WARNING, "Terrain3D", "%s is an unbound authoring template; only its bound placements can be baked." % path)
@@ -149,6 +150,17 @@ func _customize_scene(scene: Node, path: String) -> Node:
 		paths.append(bake_path)
 		_stage_file(bake_path)
 		_stage_references(bake)
+		var output := stack.scatter.promote_scenes(scene, COOKED_DIRECTORY, path + _hash)
+		if output.get("error", OK) != OK:
+			get_export_platform().add_message(EditorExportPlatform.EXPORT_MESSAGE_ERROR, "Terrain3D", "Could not save full scene instances in " + path)
+			view.remove_child(scene)
+			view.free()
+			return null
+		promoted_scenes.append_array(output.nodes)
+		for scene_path: String in output.files:
+			paths.append(scene_path)
+			_stage_file(scene_path)
+			_stage_references(ResourceLoader.load(scene_path))
 	# A classic terrain with attachment groups keeps its external region files. Stage
 	# its cooked palette as well, including when Godot reuses this customized scene.
 	for host in terrains:
@@ -190,7 +202,7 @@ func _customize_scene(scene: Node, path: String) -> Node:
 			# Keep ordinary scene ownership (scripts may use owner). Authoring roots
 			# lose their source scene and their direct owned nodes become scene-owned.
 			node.owner = desired if is_instance_valid(desired) and desired.is_ancestor_of(node) else scene
-	for node in promoted_hosts:
+	for node in promoted_hosts + promoted_scenes:
 		if is_instance_valid(node) and node != scene:
 			node.owner = scene
 	view.remove_child(scene)

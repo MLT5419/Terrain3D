@@ -23,6 +23,7 @@ var _binding_hash := 0
 var _fallback := Terrain3DTextureAsset.new()
 var exporting := false
 var _save_frame := -1
+var scatter := Terrain3DScatterCompositor.new()
 
 func _ready() -> void:
 	host = get_parent() as Terrain3D
@@ -33,7 +34,7 @@ func _process(delta: float) -> void:
 	if _poll < 0.2:
 		return
 	_poll = 0.0
-	var state := hash([host.vertex_spacing, host.layer_bindings.get("materials") if host.layer_bindings else {}, host.get_source_assets().texture_list])
+	var state := hash([host.vertex_spacing, host.layer_bindings.fingerprint() if host.layer_bindings is Terrain3DLayerBindings else 0, host.get_source_assets().texture_list, host.get_source_assets().mesh_list])
 	if state != _binding_hash:
 		_binding_hash = state
 		invalidate()
@@ -47,19 +48,30 @@ func invalidate_area(area: Rect2) -> void:
 	_queue()
 
 func invalidate_layer(layer: Terrain3DLayer) -> void:
+	_invalidate_branch(layer)
+	_queue()
+
+func _invalidate_branch(node: Node) -> void:
+	if node is Terrain3D:
+		return
+	if node is Terrain3DLayer:
+		_invalidate_one(node)
+	for child in node.get_children():
+		_invalidate_branch(child)
+
+func _invalidate_one(layer: Terrain3DLayer) -> void:
 	var id := layer.get_instance_id()
 	if _previous_bounds.has(id):
 		_dirty_areas.append(_previous_bounds[id])
-	if layer.enabled and layer.data and not layer.data.chunks.is_empty():
+	if layer.participates() and layer.data and not layer.data.chunks.is_empty():
 		var area := layer.source_bounds().grow(layer.data.spacing)
 		_previous_bounds[id] = area
 		_dirty_areas.append(area)
 	else:
 		_previous_bounds.erase(id)
-	_queue()
 
 func remember_layer_bounds(layer: Terrain3DLayer) -> void:
-	if layer.enabled and layer.data and not layer.data.chunks.is_empty():
+	if layer.participates() and layer.data and not layer.data.chunks.is_empty():
 		_previous_bounds[layer.get_instance_id()] = layer.source_bounds().grow(layer.data.spacing)
 
 func _queue() -> void:
@@ -96,16 +108,17 @@ func _capture_base() -> void:
 		if region.is_deleted() and (host.data_directory.is_empty() or not FileAccess.file_exists(host.data_directory.path_join(Terrain3DUtil.location_to_filename(region.location)))):
 			continue
 		_base[region.location] = _copy_region(region)
+	scatter.capture_base(self)
 	_base_ready = true
 
-func _resource_changed() -> void:
+func _resource_changed(_id: Variant = null) -> void:
 	_palette_signature = -1
 	invalidate()
 
 func _watch(resource: Resource) -> void:
 	if not resource:
 		return
-	for signal_name in [&"changed", &"setting_changed", &"file_changed"]:
+	for signal_name in [&"changed", &"setting_changed", &"file_changed", &"instancer_setting_changed"]:
 		if resource.has_signal(signal_name) and not resource.is_connected(signal_name, _resource_changed):
 			resource.connect(signal_name, _resource_changed)
 
@@ -115,6 +128,10 @@ func _resolve_palette() -> bool:
 		return false
 	var source := host.get_source_assets()
 	var resources: Array[Terrain3DTextureAsset] = []
+	var meshes: Array[Terrain3DMeshAsset] = []
+	meshes.assign(source.mesh_list)
+	if not scatter.resolve_palette(self, meshes):
+		return false
 	var identities := {}
 	var signature_values: Array = [source.texture_compression, source.texture_resolution]
 	for asset in source.texture_list:
@@ -129,7 +146,7 @@ func _resolve_palette() -> bool:
 		resources.append(_fallback)
 	_remaps.clear()
 	for layer in layers:
-		if not layer.enabled or not layer.data:
+		if not layer.participates() or not layer.data:
 			continue
 		if layer.data.version != Terrain3DLayerData.FORMAT_VERSION:
 			errors.append("%s: unsupported layer data version." % layer.name)
@@ -161,12 +178,20 @@ func _resolve_palette() -> bool:
 		resources.append(_fallback)
 	for asset in resources:
 		signature_values.append(asset.get_instance_id())
+	signature_values.append("meshes")
+	for asset in meshes:
+		signature_values.append(asset.get_instance_id())
 	var signature := hash(signature_values)
 	if signature != _palette_signature:
 		var compiled := Terrain3DAssets.new()
 		compiled.texture_compression = source.texture_compression
 		compiled.texture_resolution = source.texture_resolution
-		compiled.mesh_list = source.mesh_list
+		var compiled_meshes: Array[Terrain3DMeshAsset] = []
+		for index in meshes.size():
+			var copy := meshes[index].duplicate() as Terrain3DMeshAsset
+			copy.id = index
+			compiled_meshes.append(copy)
+		compiled.mesh_list = compiled_meshes
 		var textures: Array[Terrain3DTextureAsset] = []
 		for index in resources.size():
 			var copy := resources[index].duplicate() as Terrain3DTextureAsset
@@ -257,7 +282,7 @@ func recompose(force: bool = false) -> Error:
 			_tiles_for(area, tiles)
 		_previous_bounds.clear()
 		for layer in layers:
-			if layer.enabled and layer.data and not layer.data.chunks.is_empty():
+			if layer.participates() and layer.data and not layer.data.chunks.is_empty():
 				var area := layer.source_bounds().grow(layer.data.spacing)
 				_previous_bounds[layer.get_instance_id()] = area
 				_tiles_for(area, tiles)
@@ -286,7 +311,7 @@ func recompose(force: bool = false) -> Error:
 		var keep: bool = _base.has(location) and not _base[location].is_deleted()
 		var region_bounds := Rect2(Vector2(location * host.region_size) * host.vertex_spacing, Vector2.ONE * host.region_size * host.vertex_spacing)
 		for layer in layers:
-			keep = keep or (layer.enabled and layer.data and not layer.data.chunks.is_empty() and region_bounds.intersects(layer.source_bounds().grow(layer.data.spacing), true))
+			keep = keep or (layer.participates() and layer.data and not layer.data.chunks.is_empty() and region_bounds.intersects(layer.source_bounds().grow(layer.data.spacing), true))
 		if keep:
 			host.data._apply_layer_region(location, outputs[location])
 		elif host.data.has_region(location):
@@ -298,6 +323,7 @@ func recompose(force: bool = false) -> Error:
 	if host.get_collision():
 		host.get_collision().update(Vector2i(2147483647, 2147483647), true)
 	host.snap()
+	scatter.compose(self)
 	composing = false
 	Terrain3DAttachmentGroup.solve_for_host(host)
 	if not has_layers:
@@ -320,8 +346,8 @@ func _compose_tile(tile: Vector2i, location: Vector2i, maps: Array[Image]) -> vo
 	var active_bounds: Array[Rect2] = []
 	var tile_rect := Rect2(Vector2(first) * host.vertex_spacing, Vector2.ONE * TILE * host.vertex_spacing)
 	for layer in layers:
-		var bounds := layer.source_bounds().grow(layer.data.spacing) if layer.enabled and layer.data else Rect2()
-		if layer.enabled and layer.data and bounds.intersects(tile_rect, true):
+		var bounds := layer.source_bounds().grow(layer.data.spacing) if layer.participates() and layer.data else Rect2()
+		if layer.participates() and layer.data and bounds.intersects(tile_rect, true):
 			active.append(layer)
 			active_bounds.append(bounds)
 	for y in TILE:
@@ -389,7 +415,7 @@ func height_before(target: Terrain3DLayer, world: Vector2) -> float:
 	for layer in layers:
 		if layer == target:
 			break
-		if layer.enabled and layer.data:
+		if layer.participates() and layer.data:
 			var source := layer.source_position(world)
 			if source.is_finite():
 				var w := layer.data.sample_coverage(source, 0) * layer.height_opacity

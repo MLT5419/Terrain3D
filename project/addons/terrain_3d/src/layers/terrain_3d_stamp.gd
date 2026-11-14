@@ -138,8 +138,8 @@ func apply_configuration(properties: Dictionary) -> void:
 				child.rebase_authored_origin(delta)
 
 func center_pivot() -> void:
-	if data:
-		var centered := data.get_bounds().get_center()
+	if data or scatter_data:
+		var centered := source_content_bounds().get_center()
 		var result := global_transform
 		var delta := centered - pivot
 		result.origin += result.basis * Vector3(delta.x, 0, delta.y)

@@ -347,6 +347,14 @@ void Terrain3DMeshAsset::commit_meshes() {
 }
 
 void Terrain3DMeshAsset::set_generated_type(const GenType p_type) {
+	// Resource duplication/loading restores this stored property after scene_file.
+	// TYPE_NONE describes the imported meshes; it must not regenerate a texture card.
+	if (p_type == TYPE_NONE) {
+		if (_packed_scene.is_valid()) {
+			_generated_type = TYPE_NONE;
+		}
+		return;
+	}
 	SET_IF_DIFF(_generated_type, CLAMP(p_type, GenType(TYPE_NONE + 1), GenType(TYPE_MAX - 1)));
 	LOG(INFO, "ID ", _id, ", ", _name, ": Setting generated type: ", _generated_type);
 	_assign_generated_mesh();

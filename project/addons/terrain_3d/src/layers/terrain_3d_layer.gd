@@ -5,6 +5,7 @@ extends Node3D
 ## Editable non-destructive terrain contribution. Sibling order is bottom to top.
 
 enum HeightMode { ADD, REPLACE }
+enum InstanceMode { ADD, MASK_LOWER, REPLACE }
 signal layer_changed
 
 ## Source maps. Save externally for collaboration; Make Data Unique before editing an independent copy.
@@ -46,6 +47,26 @@ signal layer_changed
 		_changed()
 ## Brushes erase this layer's coverage, exposing the layers below.
 @export var erase_mode := false
+@export_group("Instances")
+@export var scatter_data: Terrain3DScatterData:
+	set(value):
+		if scatter_data and scatter_data.changed.is_connected(_changed):
+			scatter_data.changed.disconnect(_changed)
+		scatter_data = value
+		if scatter_data:
+			scatter_data.changed.connect(_changed)
+		_changed()
+@export var instance_slots: Array[Terrain3DInstanceSlot] = []
+@export var instance_mode: InstanceMode = InstanceMode.ADD
+@export_range(0, 1, 0.01) var instance_opacity := 1.0
+## Instances per square meter at full brush strength; opacity thins existing records separately.
+@export_range(0.001, 100, 0.01, "or_greater") var paint_density := 1.0
+## Empty filters affect all lower instances. Both filters must match when supplied.
+@export var mask_keys: Array[StringName] = []
+@export var mask_categories: Array[StringName] = []
+@export var instance_placement: Terrain3DAttachmentSettings = Terrain3DAttachmentSettings.new()
+@export_tool_button("Create Instance Data") var create_instances_action: Callable = create_instance_data
+@export_tool_button("Make Instances Unique") var unique_instances_action: Callable = make_instances_unique
 @export_group("Standalone")
 @export_range(0.25, 100.0) var preview_vertex_spacing := 1.0
 @export var preview_material: Terrain3DMaterial
@@ -61,6 +82,11 @@ var _baked_only := false
 var _before_chunks := {}
 var _before_bounds := Rect2i()
 var _stroke_changed := false
+var _instance_stroke := {}
+var _instances_before: Terrain3DScatterData
+
+func _init() -> void:
+	instance_placement.mode = Terrain3DAttachmentSettings.Mode.SNAP
 
 func _ready() -> void:
 	if not uses_local_transform():
@@ -81,10 +107,12 @@ func _process(delta: float) -> void:
 		return
 	_poll_time = 0.0
 	_ensure_host()
-	var state := hash([slots, bindings.materials if bindings else {}, enabled, get_index(), global_transform, height_mode, height_opacity, paint_enabled])
+	var state := hash([slots, bindings.fingerprint() if bindings else 0, enabled, get_index(), global_transform, height_mode, height_opacity, paint_enabled, instance_mode, instance_opacity, mask_keys, mask_categories, instance_placement.fingerprint() if instance_placement else 0, scatter_data])
 	for slot in slots:
 		if slot:
 			state = hash([state, slot.key, slot.default_resource, slot.preview_resource])
+	for slot in instance_slots:
+		state = hash([state, slot.fingerprint() if slot else 0])
 	if state != _state_hash:
 		_state_hash = state
 		_changed()
@@ -100,6 +128,9 @@ func _notification(what: int) -> void:
 			var error := ResourceSaver.save(data, "", ResourceSaver.FLAG_COMPRESS)
 			if error != OK:
 				push_error("Could not save terrain layer data: " + data.resource_path)
+		if scatter_data and not scatter_data.is_built_in() and not scatter_data.resource_path.is_empty():
+			if ResourceSaver.save(scatter_data, "", ResourceSaver.FLAG_COMPRESS) != OK:
+				push_error("Could not save terrain instance data: " + scatter_data.resource_path)
 		if host:
 			for index in slots.size():
 				var asset := resolve_slot(index, is_instance_valid(_preview_host))
@@ -143,6 +174,9 @@ func _parent_terrain() -> Terrain3D:
 			preview = parent._preview_host
 		parent = parent.get_parent()
 	return preview
+
+func participates() -> bool:
+	return enabled and Terrain3DPlacementSolver.layer_enabled(self)
 
 func get_terrain() -> Terrain3D:
 	return _parent_terrain() if _parent_terrain() else _preview_host
@@ -243,7 +277,64 @@ func get_edit_assets() -> Terrain3DAssets:
 		asset.name = str(slots[index].key) if slots[index] else "Missing slot"
 		textures.append(asset)
 	_edit_assets.texture_list = textures
+	var meshes: Array[Terrain3DMeshAsset] = []
+	for index in mini(instance_slots.size(), Terrain3DAssets.MAX_MESHES):
+		var resource := resolve_instance_slot(index, is_instance_valid(_preview_host))
+		var mesh: Terrain3DMeshAsset
+		if resource is Terrain3DMeshAsset:
+			mesh = resource.duplicate()
+		else:
+			mesh = Terrain3DMeshAsset.new()
+			if resource is PackedScene:
+				mesh.set_meta("_terrain3d_scene_preview", resource)
+		mesh.id = index
+		mesh.name = str(instance_slots[index].key) if instance_slots[index] else "Missing slot"
+		mesh.enabled = instance_slots[index].enabled if instance_slots[index] else false
+		var count := 0
+		if scatter_data:
+			for record: Dictionary in scatter_data.records.values():
+				if record.slot == index:
+					count += 1
+		mesh.set_meta("_terrain3d_source_count", count)
+		meshes.append(mesh)
+	_edit_assets.mesh_list = meshes
 	return _edit_assets
+
+func resolve_instance_slot(index: int, preview: bool = false) -> Resource:
+	if index < 0 or index >= instance_slots.size() or not instance_slots[index]:
+		return null
+	var slot := instance_slots[index]
+	var resource := bindings.resolve_instance(slot.key, slot.kind) if bindings else null
+	var host := get_terrain()
+	if not resource and host and host.layer_bindings is Terrain3DLayerBindings:
+		resource = host.layer_bindings.resolve_instance(slot.key, slot.kind)
+	if not resource:
+		resource = slot.default_mesh if slot.kind == Terrain3DInstanceSlot.Kind.MESH else slot.default_scene
+	if not resource and preview:
+		resource = slot.preview_mesh if slot.kind == Terrain3DInstanceSlot.Kind.MESH else slot.preview_scene
+	return resource
+
+func instance_world_pose(local: Transform3D, inherit_scale: bool) -> Transform3D:
+	var point := _source_to_world(Vector2(local.origin.x, local.origin.z))
+	var basis := global_basis if inherit_scale else Terrain3DPlacementSolver.parent_rotation(self)
+	return Transform3D(basis * local.basis, Vector3(point.x, global_position.y + global_basis.y.y * local.origin.y, point.y))
+
+func source_content_bounds() -> Rect2:
+	var result := data.get_bounds() if data else Rect2()
+	if scatter_data:
+		var instances := scatter_data.get_bounds()
+		result = result.merge(instances) if result.has_area() else instances
+	return result
+
+func create_instance_data() -> void:
+	if not scatter_data:
+		var created := Terrain3DScatterData.new()
+		created.mask.spacing = get_terrain().vertex_spacing if get_terrain() else preview_vertex_spacing
+		commit_configuration("Create Terrain Instance Data", {"scatter_data": null}, {"scatter_data": created})
+
+func make_instances_unique() -> void:
+	if scatter_data:
+		commit_configuration("Make Terrain Instances Unique", {"scatter_data": scatter_data}, {"scatter_data": scatter_data.clone_source()})
 
 func make_data_unique() -> void:
 	if data:
@@ -275,7 +366,15 @@ func commit_configuration(title: String, before: Dictionary, after: Dictionary) 
 		EditorInterface.mark_scene_as_unsaved()
 
 func begin_operation(tool: int, operation: int) -> bool:
-	if locked or not enabled or not data:
+	_instances_before = null
+	if tool == Terrain3DEditor.INSTANCER:
+		if locked or not participates() or not scatter_data or not is_transform_valid():
+			push_warning("Enable and unlock the layer, then use Create Instance Data before painting instances.")
+			return false
+		_instances_before = scatter_data.clone_source()
+		_instance_stroke = {}
+		return true
+	if locked or not participates() or not data:
 		push_warning("Unlock and enable this layer, and assign its data before editing.")
 		return false
 	if tool not in [Terrain3DEditor.SCULPT, Terrain3DEditor.HEIGHT, Terrain3DEditor.TEXTURE, Terrain3DEditor.COLOR, Terrain3DEditor.ROUGHNESS]:
@@ -295,6 +394,9 @@ func _source_to_world(source: Vector2) -> Vector2:
 	return source
 
 func paint_brush(position_world: Vector3, camera_angle: float, brush: Dictionary, tool: int, operation: int) -> void:
+	if tool == Terrain3DEditor.INSTANCER:
+		Terrain3DScatterBrush.paint(self, position_world, brush, operation, _instance_stroke, camera_angle)
+		return
 	var diameter: float = maxf(brush.get("size", 10.0), 0.1)
 	var center := Vector2(position_world.x, position_world.z)
 	var world_bounds := Rect2(center - Vector2.ONE * diameter * 0.5, Vector2.ONE * diameter)
@@ -390,6 +492,14 @@ func restore_patch(target: Terrain3DLayerData, chunks: Dictionary, bounds: Rect2
 	target.emit_changed()
 
 func end_operation(plugin: Object) -> void:
+	if _instances_before:
+		if plugin and _instance_stroke.get("changed", false):
+			plugin.call("create_undo_action", "Terrain3D Layer Instances")
+			plugin.call("add_undo_method", restore_instances.bind(scatter_data, _instances_before))
+			plugin.call("add_do_method", restore_instances.bind(scatter_data, scatter_data.clone_source()))
+			plugin.call("commit_action", false)
+		_instances_before = null
+		return
 	if _stroke_changed and plugin:
 		var after := {}
 		for key: Vector2i in _before_chunks:
@@ -400,9 +510,15 @@ func end_operation(plugin: Object) -> void:
 		plugin.call("commit_action", false)
 	_before_chunks = {}
 
+func restore_instances(target: Terrain3DScatterData, snapshot: Terrain3DScatterData) -> void:
+	target.records = snapshot.records.duplicate(true)
+	target.next_id = snapshot.next_id
+	target.mask = snapshot.mask.clone_source() if snapshot.mask else null
+	target.emit_changed()
+
 func _get_configuration_warnings() -> PackedStringArray:
 	var result := PackedStringArray()
-	if not data:
+	if not data and not scatter_data:
 		result.append("Assign a Terrain3DLayerData resource before painting or importing heights.")
 	if not uses_local_transform() and not is_transform_valid():
 		result.append("Paint layers use the terrain grid. Use Terrain3DStamp for movable content.")

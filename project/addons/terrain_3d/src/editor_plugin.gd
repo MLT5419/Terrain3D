@@ -27,6 +27,7 @@ var layer_gizmo: EditorNode3DGizmoPlugin
 # Terrain
 var terrain: Terrain3D
 var active_layer: Terrain3DLayer
+var _layer_dock_pending := false
 var _last_terrain: Terrain3D
 var nav_region: NavigationRegion3D
 
@@ -150,7 +151,11 @@ func _edit(p_object: Object) -> void:
 			return
 		if editor.is_operating():
 			editor.stop_operation()
+		if is_instance_valid(active_layer) and active_layer.layer_changed.is_connected(_layer_assets_changed):
+			active_layer.layer_changed.disconnect(_layer_assets_changed)
 		active_layer = layer
+		if active_layer:
+			active_layer.layer_changed.connect(_layer_assets_changed)
 		terrain = target
 		_last_terrain = terrain
 		terrain.set_plugin(self)
@@ -189,6 +194,8 @@ func _make_visible(p_visible: bool, p_redraw: bool = false) -> void:
 func _clear() -> void:
 	if editor and editor.is_operating():
 		editor.stop_operation()
+	if is_instance_valid(active_layer) and active_layer.layer_changed.is_connected(_layer_assets_changed):
+		active_layer.layer_changed.disconnect(_layer_assets_changed)
 	active_layer = null
 	if editor:
 		editor.set_active_layer(null)
@@ -198,6 +205,16 @@ func _clear() -> void:
 		terrain = null
 		editor.set_terrain(null)
 		ui.clear_picking()
+
+func _layer_assets_changed() -> void:
+	if not _layer_dock_pending:
+		_layer_dock_pending = true
+		call_deferred("_refresh_layer_dock")
+
+func _refresh_layer_dock() -> void:
+	_layer_dock_pending = false
+	if is_instance_valid(active_layer) and is_instance_valid(asset_dock) and not asset_dock.is_queued_for_deletion():
+		asset_dock.update_assets()
 
 
 func _forward_3d_gui_input(p_viewport_camera: Camera3D, p_event: InputEvent) -> AfterGUIInput:
