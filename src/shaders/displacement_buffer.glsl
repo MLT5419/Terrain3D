@@ -60,8 +60,9 @@ uniform highp sampler2DArray _control_maps : repeat_disable;
 //INSERT: TEXTURE_SAMPLERS_NEAREST_ANISOTROPIC
 //INSERT: TEXTURE_SAMPLERS_NEAREST
 uniform highp sampler2DArray _texture_array_albedo : source_color, FILTER_METHOD, repeat_enable;
-uniform highp sampler2DArray _texture_array_normal : hint_normal, FILTER_METHOD, repeat_enable;
+uniform highp sampler2DArray _texture_array_normal : FILTER_METHOD, repeat_enable;
 //INSERT: PBR_MATERIAL_UNIFORMS
+//INSERT: PBR_MATERIAL_FRAGMENT_UNIFORMS
 group_uniforms;
 
 // Public uniforms

@@ -66,6 +66,9 @@
     <ClInclude Include="src\terrain_3d_material_baker.h">
       <Filter>5. Headers</Filter>
     </ClInclude>
+    <ClInclude Include="src\terrain_3d_texture_cache.h">
+      <Filter>5. Headers</Filter>
+    </ClInclude>
     <ClInclude Include="src\terrain_3d_asset_resource.h">
       <Filter>5. Headers</Filter>
     </ClInclude>
@@ -111,6 +114,9 @@
       <Filter>6. C++</Filter>
     </ClCompile>
     <ClCompile Include="src\terrain_3d_material_baker.cpp">
+      <Filter>6. C++</Filter>
+    </ClCompile>
+    <ClCompile Include="src\terrain_3d_texture_cache.cpp">
       <Filter>6. C++</Filter>
     </ClCompile>
     <ClCompile Include="src\generated_texture.cpp">

@@ -1,5 +1,6 @@
 // Copyright © 2023-2026 Cory Petkovsek, Roope Palmroos, and Contributors.
 
+#include <godot_cpp/classes/hashing_context.hpp>
 #include <godot_cpp/classes/orm_material3d.hpp>
 #include <godot_cpp/variant/utility_functions.hpp>
 
@@ -7,7 +8,7 @@
 
 namespace {
 using BM = BaseMaterial3D;
-constexpr int BAKE_VERSION = 1;
+constexpr int BAKE_VERSION = 2;
 const BM::TextureParam MAPS[] = { BM::TEXTURE_ALBEDO, BM::TEXTURE_NORMAL, BM::TEXTURE_ROUGHNESS,
 	BM::TEXTURE_METALLIC, BM::TEXTURE_AMBIENT_OCCLUSION, BM::TEXTURE_EMISSION,
 	BM::TEXTURE_HEIGHTMAP, BM::TEXTURE_ORM };
@@ -89,6 +90,25 @@ Color pixel(const Ref<Image> &p_image, int x, int y, const Color &p_default = Co
 uint8_t byte(float p_value) {
 	return uint8_t(CLAMP(p_value * 255.f + .5f, 0.f, 255.f));
 }
+
+String hash_sources(Array p_values, const TypedArray<Texture2D> &p_textures) {
+	Ref<HashingContext> hash;
+	hash.instantiate();
+	hash->start(HashingContext::HASH_SHA256);
+	hash->update(UtilityFunctions::var_to_bytes(p_values));
+	for (const Ref<Texture2D> &texture : p_textures) {
+		Ref<Image> image = texture.is_valid() ? texture->get_image() : Ref<Image>();
+		Array info;
+		info.push_back(image.is_valid() ? int(image->get_format()) : -1);
+		info.push_back(image.is_valid() ? image->get_size() : Vector2i());
+		info.push_back(image.is_valid() && image->has_mipmaps());
+		hash->update(UtilityFunctions::var_to_bytes(info));
+		if (image.is_valid()) {
+			hash->update(image->get_data());
+		}
+	}
+	return hash->finish().hex_encode();
+}
 } // namespace
 
 uint32_t Terrain3DMaterialBaker::source_state(const Ref<BaseMaterial3D> &p_material) {
@@ -105,19 +125,29 @@ uint32_t Terrain3DMaterialBaker::source_state(const Ref<BaseMaterial3D> &p_mater
 String Terrain3DMaterialBaker::signature(const Ref<BaseMaterial3D> &p_material, int p_size, bool p_premultiply_ao) {
 	Array values;
 	values.push_back(BAKE_VERSION);
+	values.push_back("material");
 	values.push_back(p_size);
 	values.push_back(p_premultiply_ao);
 	values.push_back(p_material->is_class("ORMMaterial3D"));
 	for (const char *property : PIXEL_PROPERTIES) {
 		values.push_back(p_material->get(property));
 	}
+	TypedArray<Texture2D> textures;
 	for (BM::TextureParam map : MAPS) {
-		Ref<Texture2D> texture = p_material->get_texture(map);
-		Ref<Image> image = texture.is_valid() ? texture->get_image() : Ref<Image>();
-		values.push_back(image.is_valid() ? Variant(image->get_data()).hash() : 0);
-		values.push_back(image.is_valid() ? int(image->get_format()) : -1);
+		textures.push_back(p_material->get_texture(map));
 	}
-	return String::num_uint64(values.hash());
+	return hash_sources(values, textures);
+}
+
+String Terrain3DMaterialBaker::texture_signature(const Ref<Texture2D> &p_albedo, const Ref<Texture2D> &p_normal, int p_size) {
+	Array values;
+	values.push_back(BAKE_VERSION);
+	values.push_back("textures");
+	values.push_back(p_size);
+	TypedArray<Texture2D> textures;
+	textures.push_back(p_albedo);
+	textures.push_back(p_normal);
+	return hash_sources(values, textures);
 }
 
 String Terrain3DMaterialBaker::warnings(const Ref<BaseMaterial3D> &p_material) {
@@ -249,10 +279,80 @@ Error Terrain3DMaterialBaker::bake(const Ref<BaseMaterial3D> &p_material, int p_
 	r_images.clear();
 	for (int j = 0; j < (auxiliary ? 3 : 2); j++) {
 		Ref<Image> image = Image::create_from_data(p_size, p_size, true, Image::FORMAT_RGBA8, output[j]);
-		// Preserve ALL four channels. A normal-map compressor would discard metallic/roughness.
-		Error error = image->compress(Image::COMPRESS_BPTC, Image::COMPRESS_SOURCE_GENERIC);
-		ERR_FAIL_COND_V_MSG(error != OK, error, "BC7 compression requires an editor build with BPTC support.");
+		// Lossless master. GPU variants are encoded separately from these bytes.
 		r_images.push_back(image);
+	}
+	return OK;
+}
+
+Error Terrain3DMaterialBaker::bake_textures(const Ref<Texture2D> &p_albedo, const Ref<Texture2D> &p_normal, int p_size, TypedArray<Image> &r_images) {
+	Ref<Image> albedo = p_albedo.is_valid() ? p_albedo->get_image() : Ref<Image>();
+	Ref<Image> normal = p_normal.is_valid() ? p_normal->get_image() : Ref<Image>();
+	ERR_FAIL_COND_V((p_albedo.is_valid() && (albedo.is_null() || albedo->is_empty())) || (p_normal.is_valid() && (normal.is_null() || normal->is_empty())), ERR_CANT_OPEN);
+	if (albedo.is_valid()) {
+		albedo = albedo->duplicate();
+		if (albedo->is_compressed()) {
+			ERR_FAIL_COND_V(albedo->decompress() != OK, ERR_UNAVAILABLE);
+		}
+	} else {
+		albedo = Image::create(p_size, p_size, false, Image::FORMAT_RGBA8);
+		albedo->fill(Color(.5, .5, .5, 1));
+		albedo->fill_rect(Rect2i(0, 0, p_size / 2, p_size / 2), Color(.8, .8, .8, 1));
+		albedo->fill_rect(Rect2i(p_size / 2, p_size / 2, p_size / 2, p_size / 2), Color(.8, .8, .8, 1));
+	}
+	if (normal.is_valid()) {
+		normal = normal->duplicate();
+		if (normal->is_compressed()) {
+			ERR_FAIL_COND_V(normal->decompress() != OK, ERR_UNAVAILABLE);
+		}
+	} else {
+		normal = Image::create(p_size, p_size, false, Image::FORMAT_RGBA8);
+		normal->fill(Color(.5, .5, 1, 1));
+	}
+	// Preserve imported mip chains when the resolution matches. In particular, legacy
+	// normal-vector lengths encode AO and must not be normalized before extracting it.
+	for (Ref<Image> image : { albedo, normal }) {
+		image->convert(Image::FORMAT_RGBAF);
+		if (image->get_size() != Vector2i(p_size, p_size)) {
+			image->resize(p_size, p_size, Image::INTERPOLATE_BILINEAR);
+		}
+		if (!image->has_mipmaps()) {
+			image->generate_mipmaps();
+		}
+	}
+	PackedByteArray albedo_data = albedo->get_data();
+	PackedByteArray normal_data = normal->get_data();
+	ERR_FAIL_COND_V(albedo_data.size() != normal_data.size(), ERR_INVALID_DATA);
+	const float *a = reinterpret_cast<const float *>(albedo_data.ptr());
+	const float *n = reinterpret_cast<const float *>(normal_data.ptr());
+	int64_t count = albedo_data.size() / sizeof(float);
+	PackedByteArray output[3];
+	for (int i = 0; i < 3; i++) {
+		output[i].resize(count);
+	}
+	uint8_t *out_a = output[0].ptrw();
+	uint8_t *out_n = output[1].ptrw();
+	uint8_t *out_e = output[2].ptrw();
+	bool auxiliary = false;
+	for (int64_t i = 0; i < count; i += 4) {
+		for (int j = 0; j < 4; j++) {
+			out_a[i + j] = byte(a[i + j]);
+		}
+		Vector3 direction(n[i] * 2.f - 1.f, n[i + 1] * 2.f - 1.f, n[i + 2] * 2.f - 1.f);
+		float length = direction.length();
+		float occlusion = CLAMP(Math::pow(length * 2.f - 1.f, 2.f), 0.f, 1.f);
+		direction = length > .00001f ? direction / length : Vector3(0, 0, 1);
+		out_n[i] = byte(direction.x * .5f + .5f);
+		out_n[i + 1] = byte(direction.y * .5f + .5f);
+		out_n[i + 2] = byte(n[i + 3]);
+		out_n[i + 3] = 0; // Legacy layers have no metallic channel.
+		out_e[i] = out_e[i + 1] = out_e[i + 2] = 0;
+		out_e[i + 3] = byte(occlusion);
+		auxiliary = auxiliary || out_e[i + 3] != 255;
+	}
+	r_images.clear();
+	for (int j = 0; j < (auxiliary ? 3 : 2); j++) {
+		r_images.push_back(Image::create_from_data(p_size, p_size, true, Image::FORMAT_RGBA8, output[j]));
 	}
 	return OK;
 }

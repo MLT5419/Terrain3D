@@ -150,6 +150,12 @@
 		</method>
 	</methods>
 	<members>
+		<member name="texture_compression" type="int" enum="Terrain3DTextureCache.Compression" setter="set_texture_compression" getter="get_texture_compression" default="0">
+			Shared texture-array compression profile. Auto chooses a supported preview format and a platform-specific export format. Unsupported cooked formats fall back to decoding as RGBA8 at runtime.
+		</member>
+		<member name="texture_resolution" type="int" setter="set_texture_resolution" getter="get_texture_resolution" default="0">
+			Shared square resolution for both texture and PBR sources. Zero selects the largest source/requested size, rounded up to a power of two and capped at 4096.
+		</member>
 		<member name="mesh_list" type="Terrain3DMeshAsset[]" setter="set_mesh_list" getter="get_mesh_list" default="[]">
 			The list of mesh assets.
 		</member>

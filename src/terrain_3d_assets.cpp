@@ -186,223 +186,102 @@ void Terrain3DAssets::_set_asset(const AssetType p_type, const int p_id, const R
 	}
 }
 
-bool Terrain3DAssets::_update_material_files() {
-	PackedVector2Array material_indices;
-	material_indices.resize(MAX_TEXTURES);
-	material_indices.fill(Vector2(-1, -1));
-	int size = 0;
-	int index = 0;
+int Terrain3DAssets::get_texture_array_size() const {
+	if (_texture_resolution > 0) {
+		return _texture_resolution;
+	}
+	int size = 16;
 	for (const Ref<Terrain3DTextureAsset> &asset : _texture_list) {
-		if (asset.is_valid() && asset->get_source_mode() == Terrain3DTextureAsset::SOURCE_MATERIAL && (asset->get_material().is_valid() || asset->get_runtime_material_cache())) {
+		if (asset.is_null()) {
+			continue;
+		}
+		if (asset->get_source_mode() == Terrain3DTextureAsset::SOURCE_MATERIAL) {
 			size = MAX(size, asset->get_material_texture_size());
-		}
-	}
-	TypedArray<Image> albedo, surface, emission;
-	for (const Ref<Terrain3DTextureAsset> &asset : _texture_list) {
-		Vector2 indices(-1, -1);
-		if (asset.is_valid() && asset->get_source_mode() == Terrain3DTextureAsset::SOURCE_MATERIAL && (asset->get_material().is_valid() || asset->get_runtime_material_cache())) {
-			if (asset->bake_material(size) != OK) {
-				LOG(ERROR, "Cannot prepare PBR material for texture ID ", asset->get_id());
-				return false;
-			}
-			TypedArray<Image> cache = asset->get_material_cache();
-			indices.x = albedo.size();
-			albedo.push_back(cache[0]);
-			surface.push_back(cache[1]);
-			if (cache.size() == 3) {
-				indices.y = emission.size();
-				emission.push_back(cache[2]);
+		} else if (asset->get_runtime_material_cache()) {
+			size = MAX(size, asset->get_material_texture_size());
+		} else {
+			for (Ref<Texture2D> texture : { asset->get_albedo_texture(), asset->get_normal_texture() }) {
+				if (texture.is_valid()) {
+					size = MAX(size, MAX(texture->get_width(), texture->get_height()));
+				}
 			}
 		}
-		material_indices.set(index++, indices);
 	}
-	_material_albedo_textures.clear();
-	_material_surface_textures.clear();
-	_material_emission_textures.clear();
-	_texture_material_indices = material_indices;
-	_material_albedo_textures.create(albedo);
-	_material_surface_textures.create(surface);
-	_material_emission_textures.create(emission);
-	return true;
+	// Texture arrays require one resolution. Non-square inputs are resampled by the baker.
+	int resolution = 16;
+	while (resolution < size && resolution < 4096) {
+		resolution *= 2;
+	}
+	return resolution;
+}
+
+void Terrain3DAssets::set_texture_compression(Terrain3DTextureCache::Compression p_compression) {
+	ERR_FAIL_COND(p_compression < Terrain3DTextureCache::AUTO || p_compression > Terrain3DTextureCache::RGBA8);
+	SET_IF_DIFF(_texture_compression, p_compression);
+	_update_texture_files();
+	emit_changed();
+}
+
+void Terrain3DAssets::set_texture_resolution(int p_size) {
+	ERR_FAIL_COND(p_size != 0 && (p_size < 16 || p_size > 4096 || !Math::is_power_of_2(p_size)));
+	SET_IF_DIFF(_texture_resolution, p_size);
+	_update_texture_files();
+	emit_changed();
 }
 
 void Terrain3DAssets::_update_texture_files() {
 	IS_INIT(VOID);
-	LOG(DEBUG, "Received texture_changed signal");
-	if (!_update_material_files()) {
-		return;
+	int size = get_texture_array_size();
+	Terrain3DTextureCache::Compression compression = Terrain3DTextureCache::select_for_device(_texture_compression);
+	for (const Ref<Terrain3DTextureAsset> &asset : _texture_list) {
+		if (asset.is_null() || asset->prepare_texture_cache(size) != OK) {
+			LOG(ERROR, "Cannot prepare the unified terrain texture cache.");
+			return;
+		}
+		// An editor-authored scene may have been saved with a preview variant for a
+		// different device. Runtime can decode, but must never invoke an encoder.
+		if (!IS_EDITOR && compression != Terrain3DTextureCache::RGBA8) {
+			Ref<Terrain3DTextureCache> cache = asset->get_texture_cache();
+			Ref<Terrain3DTextureCache> prepared = asset->get_prepared_cache();
+			bool available = cache->get_compression() == compression || (prepared.is_valid() && prepared->is_valid(size) && prepared->get_signature() == cache->get_signature() && prepared->get_compression() == compression);
+			if (!available) {
+				compression = Terrain3DTextureCache::RGBA8;
+			}
+		}
+	}
+	TypedArray<Image> albedo, surface, emission;
+	PackedFloat32Array auxiliary_indices, material_weights;
+	auxiliary_indices.resize(MAX_TEXTURES);
+	auxiliary_indices.fill(-1.f);
+	material_weights.resize(MAX_TEXTURES);
+	material_weights.fill(0.f);
+	int index = 0;
+	for (const Ref<Terrain3DTextureAsset> &asset : _texture_list) {
+		Ref<Terrain3DTextureCache> cache = asset->get_encoded_cache(compression);
+		if (cache.is_null() || !cache->is_valid(size)) {
+			LOG(ERROR, "Cannot encode terrain texture array as ", Terrain3DTextureCache::compression_name(compression));
+			return;
+		}
+		TypedArray<Image> images = cache->get_images();
+		albedo.push_back(images[0]);
+		surface.push_back(images[1]);
+		if (images.size() == 3) {
+			auxiliary_indices.set(index, float(emission.size()));
+			emission.push_back(images[2]);
+		}
+		material_weights.set(index, asset->get_source_mode() == Terrain3DTextureAsset::SOURCE_MATERIAL ? 1.f : 0.f);
+		index++;
 	}
 	_generated_albedo_textures.clear();
 	_generated_normal_textures.clear();
-	if (_texture_list.is_empty()) {
-		LOG(DEBUG, "Emitting textures_changed");
-		emit_signal("textures_changed");
-		return;
-	}
-
-	// Detect image sizes and formats
-	LOG(DEBUG, "Validating texture sizes");
-	Vector2i albedo_size = V2I_ZERO;
-	Vector2i normal_size = V2I_ZERO;
-	Image::Format albedo_format = Image::FORMAT_MAX;
-	Image::Format normal_format = Image::FORMAT_MAX;
-	bool albedo_mipmaps = true;
-	bool normal_mipmaps = true;
-	Ref<Image> albedo_placeholder;
-	Ref<Image> normal_placeholder;
+	_generated_emission_textures.clear();
+	_generated_albedo_textures.create(albedo);
+	_generated_normal_textures.create(surface);
+	_generated_emission_textures.create(emission);
+	_texture_auxiliary_indices = auxiliary_indices;
+	_texture_material_weights = material_weights;
+	_active_compression = compression;
 	_terrain->set_warning(WARN_ALL, false);
-
-	for (const Ref<Terrain3DTextureAsset> &ta : _texture_list) {
-		if (ta.is_null()) {
-			continue;
-		}
-
-		if (ta->get_source_mode() == Terrain3DTextureAsset::SOURCE_MATERIAL) {
-			continue;
-		}
-		Ref<Texture2D> albedo_tex = ta->_albedo_texture;
-		if (albedo_tex.is_valid()) {
-			Vector2i tex_size = albedo_tex->get_size();
-			Ref<Image> img = albedo_tex->get_image();
-			Image::Format format = img->get_format(); // DEPRECATED - In 4.7+ we can query albedo_tex->get_format() and albedo_tex->has_mipmaps()
-			bool mipmaps = img->has_mipmaps();
-
-			// If this is the first valid texture, set expected size and format for the arrays
-			if (albedo_format == Image::FORMAT_MAX) {
-				albedo_placeholder = img;
-				albedo_size = tex_size;
-				albedo_format = format;
-				albedo_mipmaps = mipmaps;
-			} else { // else validate against first texture
-				if (tex_size != albedo_size) {
-					_terrain->set_warning(WARN_MISMATCHED_SIZE, true);
-					LOG(ERROR, "Texture ID ", ta->get_id(), " albedo size: ", tex_size, " doesn't match size of first texture: ", albedo_size, ". They must be identical. Read Texture Prep in docs.");
-				}
-				if (format != albedo_format) {
-					_terrain->set_warning(WARN_MISMATCHED_FORMAT, true);
-					LOG(ERROR, "Texture ID ", ta->get_id(), " albedo format: ", format, " doesn't match format of first texture: ", albedo_format, ". They must be identical. Read Texture Prep in docs.");
-				}
-				if (mipmaps != albedo_mipmaps) {
-					_terrain->set_warning(WARN_MISMATCHED_MIPMAPS, true);
-					LOG(ERROR, "Texture ID ", ta->get_id(), " albedo mipmap setting (", mipmaps, ") doesn't match first texture (", albedo_mipmaps, "). They must be identical. Read Texture Prep in docs.");
-				}
-			}
-		}
-
-		Ref<Texture2D> normal_tex = ta->_normal_texture;
-		if (normal_tex.is_valid()) {
-			Vector2i tex_size = normal_tex->get_size();
-			Ref<Image> img = normal_tex->get_image();
-			Image::Format format = img->get_format(); // DEPRECATED - In 4.7+ we can query normal_tex->get_format() and normal_tex->has_mipmaps()
-			bool mipmaps = img->has_mipmaps();
-
-			// If this is the first valid texture, set expected size and format for the arrays
-			if (normal_format == Image::FORMAT_MAX) {
-				normal_placeholder = img;
-				normal_size = tex_size;
-				normal_format = format;
-				normal_mipmaps = mipmaps;
-			} else { // else validate against first texture
-				if (tex_size != normal_size) {
-					_terrain->set_warning(WARN_MISMATCHED_SIZE, true);
-					LOG(ERROR, "Texture ID ", ta->get_id(), " normal size: ", tex_size, " doesn't match size of first texture: ", normal_size, ". They must be identical. Read Texture Prep in docs.");
-				}
-				if (format != normal_format) {
-					_terrain->set_warning(WARN_MISMATCHED_FORMAT, true);
-					LOG(ERROR, "Texture ID ", ta->get_id(), " normal format: ", format, " doesn't match format of first texture: ", normal_format, ". They must be identical. Read Texture Prep in docs.");
-				}
-				if (mipmaps != normal_mipmaps) {
-					_terrain->set_warning(WARN_MISMATCHED_MIPMAPS, true);
-					LOG(ERROR, "Texture ID ", ta->get_id(), " normal mipmap setting (", mipmaps, ") doesn't match first texture (", normal_mipmaps, "). They must be identical. Read Texture Prep in docs.");
-				}
-			}
-		}
-	}
-	if (_terrain->get_warnings()) {
-		return;
-	}
-
-	// Setup defaults for generated texture
-	if (normal_size == V2I_ZERO) {
-		normal_size = albedo_size;
-	} else if (albedo_size == V2I_ZERO) {
-		albedo_size = normal_size;
-	}
-	if (albedo_size == V2I_ZERO) {
-		// A material-only terrain needs tiny placeholder legacy arrays.
-		albedo_size = _material_albedo_textures.size() > 0 ? V2I(4) : V2I(1024);
-		normal_size = albedo_size;
-	}
-
-	// Generate TextureArrays and replace nulls with a empty image
-
-	if (_generated_albedo_textures.is_dirty() && albedo_size != V2I_ZERO) {
-		LOG(INFO, "Regenerating albedo texture array");
-		Array albedo_texture_array;
-		for (const Ref<Terrain3DTextureAsset> &ta : _texture_list) {
-			if (ta.is_null()) {
-				continue;
-			}
-			Ref<Texture2D> tex = ta->_albedo_texture;
-			Ref<Image> img;
-			if (ta->get_source_mode() == Terrain3DTextureAsset::SOURCE_MATERIAL) {
-				// Reuse a matching image: exported builds cannot compress new placeholder images.
-				albedo_texture_array.push_back(albedo_placeholder.is_valid() ? albedo_placeholder : Util::get_filled_image(albedo_size, COLOR_CHECKED, albedo_mipmaps, albedo_format));
-				continue;
-			}
-
-			if (tex.is_null()) {
-				img = Util::get_filled_image(albedo_size, COLOR_CHECKED, albedo_mipmaps, albedo_format);
-				LOG(DEBUG, "Texture ID ", ta->get_id(), " albedo is null. Creating a new one. Format: ", img->get_format());
-				ta->set_albedo_texture(ImageTexture::create_from_image(img));
-			} else {
-				img = tex->get_image();
-				LOG(EXTREME, "Texture ID ", ta->get_id(), " albedo is valid. Format: ", img->get_format());
-				if (!IS_EDITOR && tex->get_path().contains("ImageTexture")) {
-					LOG(WARN, "Texture ID ", ta->get_id(), " albedo is saved in the scene. Save it as a file and link it.");
-				}
-			}
-			albedo_texture_array.push_back(img);
-		}
-		if (!albedo_texture_array.is_empty()) {
-			_generated_albedo_textures.create(albedo_texture_array);
-		}
-	}
-
-	if (_generated_normal_textures.is_dirty() && normal_size != V2I_ZERO) {
-		LOG(INFO, "Regenerating normal texture arrays");
-
-		Array normal_texture_array;
-
-		for (const Ref<Terrain3DTextureAsset> &ta : _texture_list) {
-			if (ta.is_null()) {
-				continue;
-			}
-			Ref<Texture2D> tex = ta->_normal_texture;
-			Ref<Image> img;
-			if (ta->get_source_mode() == Terrain3DTextureAsset::SOURCE_MATERIAL) {
-				normal_texture_array.push_back(normal_placeholder.is_valid() ? normal_placeholder : Util::get_filled_image(normal_size, COLOR_NORMAL, normal_mipmaps, normal_format));
-				continue;
-			}
-
-			if (tex.is_null()) {
-				img = Util::get_filled_image(normal_size, COLOR_NORMAL, normal_mipmaps, normal_format);
-				LOG(DEBUG, "Texture ID ", ta->get_id(), " normal is null. Creating a new one. Format: ", img->get_format());
-				ta->_normal_texture = ImageTexture::create_from_image(img);
-			} else {
-				img = tex->get_image();
-				LOG(EXTREME, "Texture ID ", ta->get_id(), " normal is valid. Format: ", img->get_format());
-				if (!IS_EDITOR && tex->get_path().contains("ImageTexture")) {
-					LOG(WARN, "Texture ID ", ta->get_id(), " normal is saved in the scene. Save it as a file and link it.");
-				}
-			}
-			normal_texture_array.push_back(img);
-		}
-		if (!normal_texture_array.is_empty()) {
-			_generated_normal_textures.create(normal_texture_array);
-		}
-	}
-	LOG(DEBUG, "Emitting textures_changed");
 	emit_signal("textures_changed");
 }
 
@@ -526,9 +405,7 @@ void Terrain3DAssets::destroy() {
 	LOG(INFO, "Destroying assets");
 	_terrain = nullptr;
 	_generated_albedo_textures.clear();
-	_material_albedo_textures.clear();
-	_material_surface_textures.clear();
-	_material_emission_textures.clear();
+	_generated_emission_textures.clear();
 	_generated_normal_textures.clear();
 	_texture_list.clear();
 	_mesh_list.clear();
@@ -834,6 +711,12 @@ void Terrain3DAssets::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("get_texture_displacements"), &Terrain3DAssets::get_texture_displacements);
 	ClassDB::bind_method(D_METHOD("clear_textures", "update"), &Terrain3DAssets::clear_textures, DEFVAL(false));
 	ClassDB::bind_method(D_METHOD("update_texture_list"), &Terrain3DAssets::update_texture_list);
+	ClassDB::bind_method(D_METHOD("set_texture_compression", "compression"), &Terrain3DAssets::set_texture_compression);
+	ClassDB::bind_method(D_METHOD("get_texture_compression"), &Terrain3DAssets::get_texture_compression);
+	ClassDB::bind_method(D_METHOD("get_active_texture_compression"), &Terrain3DAssets::get_active_texture_compression);
+	ClassDB::bind_method(D_METHOD("set_texture_resolution", "size"), &Terrain3DAssets::set_texture_resolution);
+	ClassDB::bind_method(D_METHOD("get_texture_resolution"), &Terrain3DAssets::get_texture_resolution);
+	ClassDB::bind_method(D_METHOD("get_texture_array_size"), &Terrain3DAssets::get_texture_array_size);
 
 	ClassDB::bind_method(D_METHOD("set_mesh_asset", "id", "mesh"), &Terrain3DAssets::set_mesh_asset);
 	ClassDB::bind_method(D_METHOD("get_mesh_asset", "id"), &Terrain3DAssets::get_mesh_asset);
@@ -848,6 +731,8 @@ void Terrain3DAssets::_bind_methods() {
 	int ro_flags = PROPERTY_USAGE_STORAGE | PROPERTY_USAGE_EDITOR | PROPERTY_USAGE_READ_ONLY;
 	ADD_PROPERTY(PropertyInfo(Variant::ARRAY, "mesh_list", PROPERTY_HINT_ARRAY_TYPE, "Terrain3DMeshAsset", ro_flags), "set_mesh_list", "get_mesh_list");
 	ADD_PROPERTY(PropertyInfo(Variant::ARRAY, "texture_list", PROPERTY_HINT_ARRAY_TYPE, "Terrain3DTextureAsset", ro_flags), "set_texture_list", "get_texture_list");
+	ADD_PROPERTY(PropertyInfo(Variant::INT, "texture_compression", PROPERTY_HINT_ENUM, "Auto,BC7,ASTC 4x4,ETC2 RGBA8,BC3,RGBA8"), "set_texture_compression", "get_texture_compression");
+	ADD_PROPERTY(PropertyInfo(Variant::INT, "texture_resolution", PROPERTY_HINT_ENUM, "Auto:0,256:256,512:512,1024:1024,2048:2048,4096:4096"), "set_texture_resolution", "get_texture_resolution");
 
 	ADD_SIGNAL(MethodInfo("meshes_changed"));
 	ADD_SIGNAL(MethodInfo("textures_changed"));

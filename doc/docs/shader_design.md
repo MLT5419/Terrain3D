@@ -7,6 +7,8 @@ In the material, you can enable `shader_override_enabled` with an empty `shader 
 
 At its core, the current texture painting and rendering system is a vertex painter, not a pixel painter. We paint codes at each vertex, 1m apart by default, represented as a pixel on the [Control map](controlmap_format.md). The shader uses its many parameters to control how each pixel between the vertices blend together. For an artist, it's not as nice to use as a multi-layer, pixel based painter you might find in Photoshop, but the dynamic nature of the system does afford other benefits.
 
+Surface textures use [unified layout version 2](pbr_materials.md#unified-channel-layout): albedo/height, normal XY/roughness/metallic, and optional emission/AO. Texture-mode RGB-normal inputs are converted by the editor before upload. Custom shaders reading the old normal array must migrate their decoding and declare the layout version.
+
 The following describes the various elements of the shader in a linear fashion to help you understand how it works.
 
 

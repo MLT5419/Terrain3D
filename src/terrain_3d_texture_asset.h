@@ -9,6 +9,7 @@
 
 #include "constants.h"
 #include "terrain_3d_asset_resource.h"
+#include "terrain_3d_texture_cache.h"
 
 class Terrain3DTextureAsset : public Terrain3DAssetResource {
 	GDCLASS(Terrain3DTextureAsset, Terrain3DAssetResource);
@@ -18,12 +19,19 @@ class Terrain3DTextureAsset : public Terrain3DAssetResource {
 public:
 	enum SourceMode { SOURCE_TEXTURES,
 		SOURCE_MATERIAL };
+	enum CacheStorage { CACHE_EMBEDDED,
+		CACHE_EXTERNAL };
 
 private:
 	SourceMode _source_mode = SOURCE_TEXTURES;
 	Ref<BaseMaterial3D> _material;
 	bool _premultiply_ao = false;
 	int _material_texture_size = 1024;
+	Ref<Terrain3DTextureCache> _texture_cache;
+	Ref<Terrain3DTextureCache> _prepared_cache;
+	CacheStorage _cache_storage = CACHE_EMBEDDED;
+	String _cache_directory = "res://terrain3d_cache";
+	Error _persist_cache(Ref<Terrain3DTextureCache> &p_cache);
 	TypedArray<Image> _material_cache;
 	String _material_cache_signature;
 	float _material_emission_scale = 1.f;
@@ -70,12 +78,23 @@ public:
 	int get_material_texture_size() const { return _material_texture_size; }
 	String get_material_warnings() const;
 	Error bake_material(int p_size = 0);
+	Error prepare_texture_cache(int p_size = 0);
+	Ref<Terrain3DTextureCache> get_encoded_cache(Terrain3DTextureCache::Compression p_compression);
+	void set_texture_cache(const Ref<Terrain3DTextureCache> &p_cache) { _texture_cache = p_cache; }
+	Ref<Terrain3DTextureCache> get_texture_cache() const { return _texture_cache; }
+	void set_prepared_cache(const Ref<Terrain3DTextureCache> &p_cache) { _prepared_cache = p_cache; }
+	Ref<Terrain3DTextureCache> get_prepared_cache() const { return _prepared_cache; }
+	void set_cache_storage(CacheStorage p_storage);
+	CacheStorage get_cache_storage() const { return _cache_storage; }
+	void set_cache_directory(const String &p_directory);
+	String get_cache_directory() const { return _cache_directory; }
+	String get_cache_file() const { return _texture_cache.is_valid() ? _texture_cache->get_path() : String(); }
 	void set_material_cache(const TypedArray<Image> &p_cache) { _material_cache = p_cache; }
-	TypedArray<Image> get_material_cache() const { return _material_cache; }
+	TypedArray<Image> get_material_cache() const { return _texture_cache.is_valid() ? _texture_cache->get_images() : _material_cache; }
 	void set_material_cache_signature(const String &p_signature) { _material_cache_signature = p_signature; }
-	String get_material_cache_signature() const { return _material_cache_signature; }
+	String get_material_cache_signature() const { return _texture_cache.is_valid() ? _texture_cache->get_signature() : _material_cache_signature; }
 	void set_material_emission_scale(float p_scale) { _material_emission_scale = p_scale; }
-	float get_material_emission_scale() const { return _material_emission_scale; }
+	float get_material_emission_scale() const { return _texture_cache.is_valid() ? _texture_cache->get_emission_scale() : _material_emission_scale; }
 	void set_material_settings(const Dictionary &p_settings) { _material_settings = p_settings; }
 	Dictionary get_material_settings() const;
 	void set_runtime_material_cache(bool p_enabled) { _runtime_material_cache = p_enabled; }
@@ -135,5 +154,6 @@ protected:
 };
 
 VARIANT_ENUM_CAST(Terrain3DTextureAsset::SourceMode);
+VARIANT_ENUM_CAST(Terrain3DTextureAsset::CacheStorage);
 
 #endif // TERRAIN3D_TEXTURE_CLASS_H
