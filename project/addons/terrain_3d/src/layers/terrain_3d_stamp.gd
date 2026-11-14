@@ -110,8 +110,32 @@ func source_height(value: float) -> float:
 
 func set_pivot_preserving_position(value: Vector2) -> void:
 	var delta := value - pivot
-	global_position += global_transform.basis * Vector3(delta.x, 0, delta.y)
-	pivot = value
+	var pose := global_transform
+	pose.origin += pose.basis * Vector3(delta.x, 0, delta.y)
+	apply_configuration({"pivot": value, "global_transform": pose, "_pivot_children": _pivot_children(-delta)})
+
+func _pivot_children(delta: Vector2 = Vector2.ZERO) -> Dictionary:
+	var result := {}
+	for child in get_children():
+		if child is Node3D and not child.top_level:
+			var pose: Transform3D = child.transform
+			pose.origin += Vector3(delta.x, 0, delta.y)
+			result[get_path_to(child)] = pose
+	return result
+
+func apply_configuration(properties: Dictionary) -> void:
+	var values := properties.duplicate()
+	var children: Dictionary = values.get("_pivot_children", {})
+	values.erase("_pivot_children")
+	super.apply_configuration(values)
+	for path: NodePath in children:
+		var child := get_node_or_null(path) as Node3D
+		if child:
+			var pose: Transform3D = children[path]
+			var delta := pose.origin - child.transform.origin
+			child.transform = pose
+			if child is Terrain3DAttachmentGroup:
+				child.rebase_authored_origin(delta)
 
 func center_pivot() -> void:
 	if data:
@@ -119,7 +143,8 @@ func center_pivot() -> void:
 		var result := global_transform
 		var delta := centered - pivot
 		result.origin += result.basis * Vector3(delta.x, 0, delta.y)
-		commit_configuration("Center Terrain Stamp Pivot", {"pivot": pivot, "global_transform": global_transform}, {"pivot": centered, "global_transform": result})
+		commit_configuration("Center Terrain Stamp Pivot", {"pivot": pivot, "global_transform": global_transform, "_pivot_children": _pivot_children()},
+			{"pivot": centered, "global_transform": result, "_pivot_children": _pivot_children(-delta)})
 
 func _get_configuration_warnings() -> PackedStringArray:
 	var result := super._get_configuration_warnings()

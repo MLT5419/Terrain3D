@@ -299,6 +299,7 @@ func recompose(force: bool = false) -> Error:
 		host.get_collision().update(Vector2i(2147483647, 2147483647), true)
 	host.snap()
 	composing = false
+	Terrain3DAttachmentGroup.solve_for_host(host)
 	if not has_layers:
 		host.set_effective_assets(null)
 		_base_ready = false

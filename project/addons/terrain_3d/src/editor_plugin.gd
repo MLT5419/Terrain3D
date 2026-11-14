@@ -123,6 +123,15 @@ func _handles(p_object: Object) -> bool:
 		p_object.editor_setup(self)
 	elif p_object is Node3D and p_object.get_parent() is Terrain3DObjects:
 		p_object.get_parent().editor_setup(self)
+	elif p_object is Terrain3DAttachmentGroup:
+		p_object.editor_setup(self)
+	elif p_object is Node3D:
+		var parent: Node = p_object.get_parent()
+		while parent:
+			if parent is Terrain3DAttachmentGroup:
+				parent.editor_setup(self)
+				break
+			parent = parent.get_parent()
 	
 	return false
 

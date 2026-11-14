@@ -96,7 +96,7 @@ func _notification(what: int) -> void:
 		var host := get_terrain()
 		if host and host.get_layer_stack():
 			host.get_layer_stack().prepare_save()
-		if data and not data.resource_path.is_empty():
+		if data and not data.is_built_in() and not data.resource_path.is_empty():
 			var error := ResourceSaver.save(data, "", ResourceSaver.FLAG_COMPRESS)
 			if error != OK:
 				push_error("Could not save terrain layer data: " + data.resource_path)
@@ -105,7 +105,7 @@ func _notification(what: int) -> void:
 				var asset := resolve_slot(index, is_instance_valid(_preview_host))
 				if asset and asset.prepare_texture_cache(host.get_assets().get_texture_array_size()) == OK:
 					asset.get_encoded_cache(host.get_assets().get_active_texture_compression())
-					if not asset.resource_path.is_empty():
+					if not asset.is_built_in() and not asset.resource_path.is_empty():
 						ResourceSaver.save(asset)
 
 func _changed() -> void:

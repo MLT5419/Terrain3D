@@ -33,7 +33,7 @@ The compositor works in affected 32-sample tiles and uploads the affected terrai
 
 The **Pivot** is measured in source meters. It is independent from **Reference Height**, the source elevation subtracted before height scaling. For example, a mountain with elevations 100–130 can use a reference height of 100 to contribute 0–30 meters. Node Y position adds a masked height offset. No second floating surface is created.
 
-Use **Center Pivot** to center on the stored source sample bounds. It compensates the node position so the existing placement stays fixed. Painting and erasing do not automatically recenter the pivot. Heightmap import centers it explicitly; source sample centers span `(width - 1) * spacing` by `(height - 1) * spacing`.
+Use **Center Pivot** to center on the stored source sample bounds. It compensates the node position and ordinary child transforms so the existing placement stays fixed. Painting and erasing do not automatically recenter the pivot. Heightmap import centers it explicitly; source sample centers span `(width - 1) * spacing` by `(height - 1) * spacing`.
 
 Assign a **Heightmap** texture and use **Import Heightmap**, or set **Capture Bounds** in world X/Z meters and use **Capture Terrain Region**. Capture takes a snapshot of the current result, including its painted surfaces. It does not create a live link back to that terrain. Adjust Reference Height and Add/Replace mode to choose how the captured elevations should be reused.
 
@@ -72,3 +72,22 @@ Existing base region files remain the base. Saving through Terrain3DData writes 
 Keep the Terrain3D editor plugin enabled. Export composes placed layers using their actual bindings and saves a platform-cooked bake containing final regions and a final asset palette. Authored layer nodes become plain scene markers; standalone layers receive an ordinary baked Terrain3D. Runtime does not execute the authoring stack or need image encoders for the baked result.
 
 Selected bake and texture `.res` dependencies are explicitly staged, including when Godot reuses cached scene customization. Source maps, slot tables and preview resources are removed from these baked scene dependencies. An Export All Resources preset can still package authoring files that it explicitly includes elsewhere. Re-export after editing geometry, bindings or layer settings. Runtime layer recomposition, changing baked skins, vegetation layers, procedural generators and spline layers are outside this version's authoring workflow.
+
+## Objects attached to the composed surface
+
+Add a `Terrain3DAttachmentGroup` below Terrain3D, a Layer, or a Stamp. In **Children** processing, each direct Node3D child is an independent placement; a scene instance is treated as one object. In **Rigid** processing the container itself is placed as one assembly. Its descendants keep their local transforms, including furniture inside a house. Nested attachment solvers stop at a rigid ancestor.
+
+`Terrain3DAttachmentSettings` chooses how objects follow the final heightfield:
+
+- **Keep Offset** records the original gap between the anchor and the surface.
+- **Snap** places the anchor directly on the surface, plus Height Offset.
+- **Align Normal** preserves the gap and tilts toward the terrain normal, limited by Max Tilt Degrees.
+- **Footprint Max / Min / Average** sample local Support Points and choose a common root height. Max keeps all supports above the sampled surface; it does not detect mesh collisions.
+- **Footprint Plane** fits a plane through the sampled heights, limits tilt, then averages the support heights.
+- **None** keeps the authored pose.
+
+Anchor is in object coordinates; Anchor Marker can name a descendant Marker3D instead. Support Points also use object coordinates. Require All Supports leaves the previous result in place if any support is outside the terrain or over a hole. Hide Without Surface optionally hides that result. Moving the object horizontally keeps its gap; moving it vertically edits the gap. Capture Current Offsets explicitly records new offsets. Update Attachments recalculates immediately.
+
+Transforms are always solved from persistent source poses, so repeated updates do not add displacement. `Terrain3DAttachmentData` can be saved as an external `.res`; it stores stable child IDs, authored transforms, and offsets. Independent scene instances receive independent source records. A Stamp scales placement positions; Inherit Parent Scale optionally scales object geometry too. By default the geometry keeps its authored size.
+
+The editor follows height changes automatically. At runtime placement is calculated once; enable Runtime Follow for changing terrain. Export saves the solved ordinary scene hierarchy and removes the attachment authoring scripts and source records. Full scenes keep their own scripts, collisions and child transforms. Objects sample the final terrain and do not deform the heightfield themselves.
