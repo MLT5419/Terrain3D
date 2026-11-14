@@ -34,17 +34,17 @@ Textures can be channel packed using the `Pack Textures...` option in the Terrai
 
 ### Texture Sizes
 
-All albedo textures must be the same size, and all normal textures must be the same size. Each type gets combined into separate Texture2DArrays, so the texture sizes of the two arrays can differ.
+Source textures may have different dimensions. Preprocessing converts both texture and PBR material sources to the shared square resolution selected on Terrain3DAssets. Auto rounds up the largest input/requested size to a power of two, up to 4096; larger sources are downsampled. See [portable caches](pbr_materials.md).
 
 Double-clicking a texture file in the FileSystem panel will display it in the Inspector and show the currently imported format, size, mipmaps and VRAM consumption. Settings may be adjustable on the Godot Import tab.
 
 The demo textures are 1024x1024.
 
-For GPU efficiency, it is recommended that all of your textures have dimensions that are a power of 2 (128, 256, 512, 1024, 2048, 4096, 8192), but this isn't required.
+Power-of-two source dimensions are convenient but not required. The generated arrays use a common power-of-two resolution, with a current maximum of 4096.
 
 ### Compression Format
 
-All albedo textures must be the same format, and all normal textures must be the same format. Albedo and Normals are combined into separate Texture2DArrays, so the two can have different formats.
+Source formats may differ. The editor decodes them into a lossless unified cache, then prepares a common GPU format selected by Terrain3DAssets Texture Compression. Input imports must preserve every packed channel; do not use a normal-map import mode that discards the blue or alpha channel of a packed legacy normal/roughness/AO texture. Lossless source imports avoid an additional lossy compression step before preprocessing.
 
 Double-clicking a texture file in the FileSystem panel will display it in the Inspector and show the currently imported format, size, mipmaps and VRAM consumption. Settings may be adjustable on the Godot Import tab.
 
@@ -119,7 +119,7 @@ You can tell which is which just by looking at distinctive textures and thinking
 
 Our built in texture packing tool allows you to easily combine AO texture maps into your normal texture set using a clever technique. We expect the normals on your normal map to be normalized (typical), which means the magnitude of the normal vector can be scaled by the AO value.
 
-AO maps are not required for any texture. You can even mix and match AO or no AO on different textures, unlike with sizes or formats. If you haven't included an AO texture, AO will be approximated from the normal map.
+AO maps are not required for any texture. You can mix and match AO or no AO on different textures. If you haven't included an AO texture, AO will be approximated from the normal map.
 
 If you wish to apply AO to your textures manually or in another tool, ensure your normal map is normalized, then bake in AO with: `unpacked_normal_vector * (sqrt(ao) * 0.5 + 0.5)`.
 
@@ -144,7 +144,7 @@ We recommend you use our built in tool to pack textures.
 	* `Normal Map: Disabled`
 	* `Mipmaps Generate: On`
 
-Make sure to reimport both files. Double click each file in the filesystem and ensure the inspector reveals the expected format and size. All of the files you put in your texture list must match.
+Make sure to reimport both files. Double click each file in the filesystem and ensure the inspector reveals the expected format and size. Preprocessing normalizes the texture list to a shared array layout, resolution and GPU format.
 
 
 ## Channel Pack Textures with Gimp

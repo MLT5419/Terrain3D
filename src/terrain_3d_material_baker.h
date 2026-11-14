@@ -15,9 +15,11 @@ class Terrain3DMaterialBaker {
 public:
 	static uint32_t source_state(const Ref<BaseMaterial3D> &p_material);
 	static String signature(const Ref<BaseMaterial3D> &p_material, int p_size, bool p_premultiply_ao);
+	static String texture_signature(const Ref<Texture2D> &p_albedo, const Ref<Texture2D> &p_normal, int p_size);
 	static String warnings(const Ref<BaseMaterial3D> &p_material);
 	static Error bake(const Ref<BaseMaterial3D> &p_material, int p_size, bool p_premultiply_ao,
 			TypedArray<Image> &r_images, float &r_emission_scale);
+	static Error bake_textures(const Ref<Texture2D> &p_albedo, const Ref<Texture2D> &p_normal, int p_size, TypedArray<Image> &r_images);
 };
 
 #endif

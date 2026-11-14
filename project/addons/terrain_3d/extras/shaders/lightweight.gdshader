@@ -2,6 +2,7 @@
 // This shader is the minimum needed to allow the terrain to function, without any texturing.
 
 shader_type spatial;
+#define TERRAIN3D_TEXTURE_LAYOUT_VERSION 2
 render_mode blend_mix,depth_draw_opaque,cull_back,diffuse_burley,specular_schlick_ggx,skip_vertex_transform;
 
 /* This is an example stripped down shader with maximum performance in mind.
@@ -57,7 +58,12 @@ uniform highp sampler2DArray _height_maps : repeat_disable;
 uniform highp sampler2DArray _control_maps : repeat_disable;
 uniform highp sampler2DArray _color_maps : source_color, filter_linear_mipmap_anisotropic, repeat_disable;
 uniform highp sampler2DArray _texture_array_albedo : source_color, filter_linear_mipmap_anisotropic, repeat_enable;
-uniform highp sampler2DArray _texture_array_normal : hint_normal, filter_linear_mipmap_anisotropic, repeat_enable;
+uniform highp sampler2DArray _texture_array_normal : filter_linear_mipmap_anisotropic, repeat_enable;
+uniform highp sampler2DArray _texture_array_emission : source_color, filter_linear_mipmap_anisotropic, repeat_enable;
+uniform float _texture_auxiliary_indices[32];
+uniform float _texture_material_weights[32];
+uniform vec4 _texture_material_uvs[32];
+uniform vec2 _texture_material_properties[32];
 group_uniforms;
 
 // Public uniforms
@@ -330,6 +336,8 @@ void fragment() {
 	float normal_map_depth = 1.;
 	float ao = 1.0;
 	float ao_affect = 0.;
+	vec3 pbr = vec3(0.);
+	vec3 emission = vec3(0.);
 
 	if (textures_enabled) {
 		// set to zero before accumulation
@@ -409,15 +417,26 @@ void fragment() {
 					float id_scale = _texture_uv_scale_array[id] * 0.5;
 					vec2 id_uv = fma(world_uv, vec2(id_scale), vec2(0.5));
 					vec4 i_dd = base_dd * id_scale;
+					id_uv = id_uv * _texture_material_uvs[id].xy + _texture_material_uvs[id].zw;
+					i_dd *= _texture_material_uvs[id].xyxy;
 					vec4 alb = textureGrad(_texture_array_albedo, vec3(id_uv, float(id)), i_dd.xy, i_dd.zw);
 					float world_normal = clamp(fma(TBN[0], vec3(nrm.x), fma(TBN[1], vec3(nrm.z), v_normal * vec3(nrm.y))).y, 0., 1.);
-					nrm = textureGrad(_texture_array_normal, vec3(id_uv, float(id)), i_dd.xy, i_dd.zw);
+					vec4 surface = textureGrad(_texture_array_normal, vec3(id_uv, float(id)), i_dd.xy, i_dd.zw);
+					vec2 xy = surface.rg * 2. - 1.;
+					vec3 direction = normalize(vec3(xy, sqrt(max(1. - dot(xy, xy), 0.))));
+					direction.xy *= sign(_texture_material_uvs[id].xy);
+					nrm = vec4(direction.xzy, clamp(surface.b + _texture_roughness_mod_array[id], 0., 1.));
 					alb.rgb *= _texture_color_array[id].rgb;
-					nrm.a = clamp(nrm.a + _texture_roughness_mod_array[id], 0., 1.);
-					// Unpack normal map for blending.
-					nrm.xyz = fma(nrm.xzy, vec3(2.0), vec3(-1.0));
-					float id_ao = length(nrm.xyz) * 2.0 - 1.0;
-					id_ao = mix(id_ao * id_ao * _texture_ao_strength_array[id] + 1.0 - _texture_ao_strength_array[id], 1.0, alb.a * alb.a);
+					vec4 auxiliary = vec4(0., 0., 0., 1.);
+					if (_texture_auxiliary_indices[id] >= 0.) {
+						auxiliary = textureGrad(_texture_array_emission, vec3(id_uv, _texture_auxiliary_indices[id]), i_dd.xy, i_dd.zw);
+					}
+					float id_ao = auxiliary.a;
+					float material_weight = _texture_material_weights[id];
+					if (material_weight < .5) {
+						nrm.xyz *= .5 + .5 * sqrt(clamp(id_ao, 0., 1.));
+						id_ao = mix(id_ao * _texture_ao_strength_array[id] + 1. - _texture_ao_strength_array[id], 1., alb.a * alb.a);
+					}
 					// height weight modifier.
 					float id_weight = exp2(sharpness * log2(id_w + alb.a * world_normal));
 					albedo_height += alb * id_weight;
@@ -425,6 +444,8 @@ void fragment() {
 					normal_map_depth += _texture_normal_depth_array[id] * id_weight;
 					ao_affect += _texture_ao_affect_array[id] * id_weight;
 					ao += id_ao * id_weight;
+					pbr += vec3(surface.a, _texture_material_properties[id].y * material_weight, material_weight) * id_weight;
+					emission += auxiliary.rgb * _texture_material_properties[id].x * id_weight;
 					total_weight += id_weight;
 				}
 			}
@@ -436,6 +457,8 @@ void fragment() {
 		normal_map_depth *= weight_inv;
 		ao_affect *= weight_inv;
 		ao *= weight_inv;
+		pbr *= weight_inv;
+		emission *= weight_inv;
 	}
 
 	// Macro variation. 2 lookups
@@ -454,7 +477,9 @@ void fragment() {
 	// Apply PBR
 	ALBEDO = albedo_height.rgb * color_map.rgb * macrov;
 	ROUGHNESS = roughness;
-	SPECULAR = 1. - roughness;
+	SPECULAR = (1. - roughness) * (1. - pbr.z) + pbr.y;
+	METALLIC = pbr.x;
+	EMISSION = emission;
 	// Repack final normal map value.
 	NORMAL_MAP = fma(normalize(normal_rough.xzy), vec3(0.5), vec3(0.5));
 	NORMAL_MAP_DEPTH = normal_map_depth;

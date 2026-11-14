@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<class name="Terrain3DTextureCache" inherits="Resource" api_type="extension">
+	<brief_description>Versioned, shareable terrain surface cache.</brief_description>
+	<description>
+		Contains one lossless RGBA8 master or one cooked GPU variant of the unified terrain channel layout. Albedo/height and normal-XY/roughness/metallic are required; emission/AO is optional. Platform variants must be encoded from the lossless master. External .res files can be shared by layers with identical source signatures. Runtime exports reference only their selected cooked variant.
+	</description>
+	<methods>
+		<method name="encode" qualifiers="const">
+			<return type="Terrain3DTextureCache" />
+			<param index="0" name="compression" type="int" enum="Terrain3DTextureCache.Compression" />
+			<description>Returns a cache in the requested format without modifying this resource. Encoding is editor-only and requires an RGBA8 master. Decoding a cooked cache to RGBA8 is available at runtime when the engine includes its decoder.</description>
+		</method>
+		<method name="is_valid" qualifiers="const">
+			<return type="bool" />
+			<param index="0" name="size" type="int" default="0" />
+			<description>Checks the layout version, signature, image count, formats, mipmaps and matching dimensions. A positive size also checks the requested square resolution.</description>
+		</method>
+		<method name="save_external">
+			<return type="int" enum="Error" />
+			<param index="0" name="path" type="String" />
+			<description>Saves a binary .res cache inside the project using lossless resource compression, a temporary file and rename. Registers its UID against the final path.</description>
+		</method>
+	</methods>
+	<members>
+		<member name="layout_version" type="int" setter="set_layout_version" getter="get_layout_version" default="2">Version of the unified channel layout.</member>
+		<member name="compression" type="int" enum="Terrain3DTextureCache.Compression" setter="set_compression" getter="get_compression" default="5">Actual image format. A lossless master uses RGBA8; Auto is an assets policy, not a cache format.</member>
+		<member name="signature" type="String" setter="set_signature" getter="get_signature">SHA-256 signature of the source content and preprocessing settings.</member>
+		<member name="images" type="Image[]" setter="set_images" getter="get_images">Packed channel images with complete mip chains. Every image has the same dimensions and format.</member>
+		<member name="emission_scale" type="float" setter="set_emission_scale" getter="get_emission_scale" default="1.0">Scale applied to decoded emission RGB.</member>
+	</members>
+	<constants>
+		<constant name="LAYOUT_VERSION" value="2">Current layout version.</constant>
+		<constant name="AUTO" value="0" enum="Compression">Select a suitable device/export profile.</constant>
+		<constant name="BC7" value="1" enum="Compression">BPTC RGBA.</constant>
+		<constant name="ASTC_4X4" value="2" enum="Compression">ASTC LDR 4x4, preserving RGBA.</constant>
+		<constant name="ETC2" value="3" enum="Compression">ETC2 RGBA8, preserving full alpha.</constant>
+		<constant name="BC3" value="4" enum="Compression">S3TC/DXT5 RGBA.</constant>
+		<constant name="RGBA8" value="5" enum="Compression">Uncompressed RGBA8, used for masters and compatibility fallback.</constant>
+	</constants>
+</class>

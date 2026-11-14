@@ -605,6 +605,11 @@ void Terrain3DMaterial::_update_shader() {
 			_shader_override->set_code(_generate_shader_code());
 		}
 		code = _shader_override->get_code();
+		String source = _strip_comments(code);
+		if (source.contains("_texture_array_normal") && !source.contains("TERRAIN3D_TEXTURE_LAYOUT_VERSION 2")) {
+			LOG(ERROR, "Shader override uses the old terrain texture layout. Update normal decoding to Nxy/roughness/metallic and define TERRAIN3D_TEXTURE_LAYOUT_VERSION 2. Using the default shader until migrated.");
+			code = _generate_shader_code();
+		}
 		if (!_shader_override->is_connected("changed", callable_mp(this, &Terrain3DMaterial::_update_shader))) {
 			LOG(DEBUG, "Connecting changed signal to _update_shader()");
 			_shader_override->connect("changed", callable_mp(this, &Terrain3DMaterial::_update_shader));
@@ -623,6 +628,11 @@ void Terrain3DMaterial::_update_shader() {
 				_buffer_shader_override->set_code(_generate_buffer_shader_code());
 			}
 			code = _buffer_shader_override->get_code();
+			String source = _strip_comments(code);
+			if (source.contains("_texture_array_normal") && !source.contains("TERRAIN3D_TEXTURE_LAYOUT_VERSION 2")) {
+				LOG(ERROR, "Displacement shader override uses the old terrain texture layout. Using the default buffer shader until migrated.");
+				code = _generate_buffer_shader_code();
+			}
 			if (!_buffer_shader_override->is_connected("changed", callable_mp(this, &Terrain3DMaterial::_update_shader))) {
 				LOG(DEBUG, "Connecting changed signal to _update_shader()");
 				_buffer_shader_override->connect("changed", callable_mp(this, &Terrain3DMaterial::_update_shader));
@@ -807,15 +817,12 @@ void Terrain3DMaterial::_update_uniforms(const RID &p_material, const uint32_t p
 	RS->material_set_param(p_material, "_texture_uv_scale_array", asset_list->get_texture_uv_scales());
 	RS->material_set_param(p_material, "_texture_detile_array", asset_list->get_texture_detiles());
 	RS->material_set_param(p_material, "_texture_displacement_array", asset_list->get_texture_displacements());
-	RS->material_set_param(p_material, "_texture_material_indices", asset_list->get_texture_material_indices());
+	RS->material_set_param(p_material, "_texture_auxiliary_indices", asset_list->get_texture_auxiliary_indices());
+	RS->material_set_param(p_material, "_texture_material_weights", asset_list->get_texture_material_weights());
 	RS->material_set_param(p_material, "_texture_material_uvs", asset_list->get_texture_material_uvs());
 	RS->material_set_param(p_material, "_texture_material_properties", asset_list->get_texture_material_properties());
-	RID albedo = asset_list->get_material_albedo_rid();
-	RID surface = asset_list->get_material_surface_rid();
-	RID emission = asset_list->get_material_emission_rid();
-	RS->material_set_param(p_material, "_material_array_albedo", albedo.is_valid() ? albedo : _generated_dummy.get_rid());
-	RS->material_set_param(p_material, "_material_array_surface", surface.is_valid() ? surface : _generated_dummy.get_rid());
-	RS->material_set_param(p_material, "_material_array_emission", emission.is_valid() ? emission : _generated_dummy.get_rid());
+	RID emission = asset_list->get_emission_array_rid();
+	RS->material_set_param(p_material, "_texture_array_emission", emission.is_valid() ? emission : _generated_dummy.get_rid());
 }
 
 void Terrain3DMaterial::_set_shader_parameters(const Dictionary &p_dict) {

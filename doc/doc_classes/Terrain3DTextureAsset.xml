@@ -3,7 +3,7 @@
 	<brief_description>
 	</brief_description>
 	<description>
-		A terrain surface layer added to a [Terrain3DAssets] resource. Choose [member source_mode] to use prepared texture files or an editor-baked [StandardMaterial3D]/[ORMMaterial3D]. Switching modes preserves both configurations. Material caches are saved inside this resource; save the assets after preprocessing and before exporting.
+		A terrain surface layer added to a [Terrain3DAssets] resource. Choose [member source_mode] to use prepared texture files or an editor-baked [StandardMaterial3D]/[ORMMaterial3D]. Switching modes preserves both configurations. Both modes use unified texture arrays. Caches can be embedded or saved as external .res resources; save the assets after preprocessing and before exporting.
 	</description>
 	<tutorials>
 	</tutorials>
@@ -12,7 +12,7 @@
 			<return type="int" enum="Error" />
 			<param index="0" name="size" type="int" default="0" />
 			<description>
-				Prepares the material's packed texture cache. A size of zero uses [member material_texture_size]. Unchanged inputs reuse the cache. Compression is editor-only; exported games require a valid saved cache. The assets resource automatically uses the largest material layer resolution to produce compatible texture arrays.
+				Prepares the selected source mode's lossless packed texture cache. A size of zero uses [member material_texture_size]. Unchanged inputs reuse the cache. Compression is editor-only; exported games require a valid saved cache. The assets resource selects a common array resolution and prepares platform GPU variants separately.
 			</description>
 		</method>
 		<method name="clear">
@@ -48,6 +48,15 @@
 		</method>
 	</methods>
 	<members>
+		<member name="cache_storage" type="int" enum="Terrain3DTextureAsset.CacheStorage" setter="set_cache_storage" getter="get_cache_storage" default="0">
+			Stores caches inside the owning resource or in external content-addressed binary .res files. Both source modes support this setting.
+		</member>
+		<member name="cache_directory" type="String" setter="set_cache_directory" getter="get_cache_directory" default="&quot;res://terrain3d_cache&quot;">
+			Project directory for external lossless masters and GPU variants. Existing shared files are retained when storage settings change.
+		</member>
+		<member name="cache_file" type="String" getter="get_cache_file">
+			Read-only path of the external lossless master.
+		</member>
 		<member name="source_mode" type="int" enum="Terrain3DTextureAsset.SourceMode" setter="set_source_mode" getter="get_source_mode" default="0">
 			Selects prepared texture files or a PBR material. The inspector displays the controls for the selected mode.
 		</member>
@@ -58,7 +67,7 @@
 			Bakes AO into albedo in linear color space and removes independent AO shading. This can darken directly lit surfaces and metallic reflections. An unused auxiliary map is omitted, but emission remains supported and may still require that map.
 		</member>
 		<member name="material_texture_size" type="int" setter="set_material_texture_size" getter="get_material_texture_size" default="1024">
-			Requested baking resolution. All material layers in the same assets resource use the largest requested resolution. Generated RGBA textures use desktop BC7 compression.
+			Requested baking resolution. All material layers in the same assets resource use the largest requested resolution. The assets resource selects the shared resolution and GPU compression profile.
 		</member>
 		<member name="material_warnings" type="String" getter="get_material_warnings">
 			Read-only notes for source material features that the terrain adapter cannot transfer.
@@ -68,6 +77,7 @@
 		</member>
 		<member name="albedo_texture" type="Texture2D" setter="set_albedo_texture" getter="get_albedo_texture">
 			The texture file with albedo on RGB and height on A.
+			This is an authoring input. Exported runtime copies use their unified texture cache and omit the source texture reference.
 		</member>
 		<member name="ao_light_affect" type="float" setter="set_ao_light_affect" getter="get_ao_light_affect" default="0.0">
 			This value is applied directly to the AO_LIGHT_AFFECT in the shader, which dictates how much ambient occlusion affects light from Light3Ds. 0 means AO only affects ambient light. 1 means it also affects lights.
@@ -99,6 +109,7 @@
 		</member>
 		<member name="normal_texture" type="Texture2D" setter="set_normal_texture" getter="get_normal_texture">
 			The texture file with normal on RGB and roughness on A.
+			This is an authoring input. Exported runtime copies use their unified texture cache and omit the source texture reference.
 		</member>
 		<member name="roughness" type="float" setter="set_roughness" getter="get_roughness" default="0.0">
 			Increases or decreases the roughness texture values.
@@ -128,6 +139,12 @@
 		</signal>
 	</signals>
 	<constants>
+		<constant name="CACHE_EMBEDDED" value="0" enum="CacheStorage">
+			Store generated caches as subresources.
+		</constant>
+		<constant name="CACHE_EXTERNAL" value="1" enum="CacheStorage">
+			Reference generated external .res caches.
+		</constant>
 		<constant name="SOURCE_TEXTURES" value="0" enum="SourceMode">
 			Use the original prepared texture workflow. Default for existing assets.
 		</constant>

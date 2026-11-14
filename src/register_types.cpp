@@ -9,6 +9,7 @@
 #include "register_types.h"
 #include "terrain_3d.h"
 #include "terrain_3d_editor.h"
+#include "terrain_3d_texture_cache.h"
 
 void initialize_terrain_3d_module(ModuleInitializationLevel p_level) {
 	if (p_level != MODULE_INITIALIZATION_LEVEL_SCENE) {
@@ -16,6 +17,7 @@ void initialize_terrain_3d_module(ModuleInitializationLevel p_level) {
 	}
 	ClassDB::register_class<Terrain3D>();
 	ClassDB::register_abstract_class<Terrain3DAssetResource>();
+	ClassDB::register_class<Terrain3DTextureCache>();
 	ClassDB::register_class<Terrain3DAssets>();
 	ClassDB::register_class<Terrain3DData>();
 	ClassDB::register_class<Terrain3DEditor>();

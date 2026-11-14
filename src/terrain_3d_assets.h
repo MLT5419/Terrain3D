@@ -32,10 +32,12 @@ private:
 
 	GeneratedTexture _generated_albedo_textures;
 	GeneratedTexture _generated_normal_textures;
-	GeneratedTexture _material_albedo_textures;
-	GeneratedTexture _material_surface_textures;
-	GeneratedTexture _material_emission_textures;
-	PackedVector2Array _texture_material_indices;
+	GeneratedTexture _generated_emission_textures;
+	PackedFloat32Array _texture_auxiliary_indices;
+	PackedFloat32Array _texture_material_weights;
+	Terrain3DTextureCache::Compression _texture_compression = Terrain3DTextureCache::AUTO;
+	Terrain3DTextureCache::Compression _active_compression = Terrain3DTextureCache::RGBA8;
+	int _texture_resolution = 0;
 	PackedColorArray _texture_material_uvs;
 	PackedVector2Array _texture_material_properties;
 	double _material_poll_time = 0.;
@@ -64,7 +66,6 @@ private:
 	void _set_asset(const AssetType p_type, const int p_id, const Ref<Terrain3DAssetResource> &p_asset);
 
 	void _update_texture_files();
-	bool _update_material_files();
 	void _update_texture_settings();
 	void _update_mesh(const int p_id);
 	void _setup_thumbnail_creation();
@@ -85,10 +86,15 @@ public:
 	int get_generated_array_size() const { return _generated_albedo_textures.size(); }
 	RID get_albedo_array_rid() const { return _generated_albedo_textures.get_rid(); }
 	RID get_normal_array_rid() const { return _generated_normal_textures.get_rid(); }
-	RID get_material_albedo_rid() const { return _material_albedo_textures.get_rid(); }
-	RID get_material_surface_rid() const { return _material_surface_textures.get_rid(); }
-	RID get_material_emission_rid() const { return _material_emission_textures.get_rid(); }
-	PackedVector2Array get_texture_material_indices() const { return _texture_material_indices; }
+	RID get_emission_array_rid() const { return _generated_emission_textures.get_rid(); }
+	PackedFloat32Array get_texture_auxiliary_indices() const { return _texture_auxiliary_indices; }
+	PackedFloat32Array get_texture_material_weights() const { return _texture_material_weights; }
+	void set_texture_compression(Terrain3DTextureCache::Compression p_compression);
+	Terrain3DTextureCache::Compression get_texture_compression() const { return _texture_compression; }
+	Terrain3DTextureCache::Compression get_active_texture_compression() const { return _active_compression; }
+	void set_texture_resolution(int p_size);
+	int get_texture_resolution() const { return _texture_resolution; }
+	int get_texture_array_size() const;
 	PackedColorArray get_texture_material_uvs() const { return _texture_material_uvs; }
 	PackedVector2Array get_texture_material_properties() const { return _texture_material_properties; }
 	PackedColorArray get_texture_colors() const { return _texture_colors; }

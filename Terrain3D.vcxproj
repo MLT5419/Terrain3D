@@ -157,6 +157,7 @@
     <ClInclude Include="src\terrain_3d_region.h" />
     <ClInclude Include="src\terrain_3d_texture_asset.h" />
     <ClInclude Include="src\terrain_3d_material_baker.h" />
+    <ClInclude Include="src\terrain_3d_texture_cache.h" />
     <ClInclude Include="src\terrain_3d_util.h" />
     <ClInclude Include="src\terrain_3d_material.h" />
     <ClInclude Include="src\terrain_3d_assets.h" />
@@ -173,6 +174,7 @@
     <ClCompile Include="src\terrain_3d_instancer.cpp" />
     <ClCompile Include="src\terrain_3d_material.cpp" />
     <ClCompile Include="src\terrain_3d_material_baker.cpp" />
+    <ClCompile Include="src\terrain_3d_texture_cache.cpp" />
     <ClCompile Include="src\terrain_3d_mesh_asset.cpp" />
     <ClCompile Include="src\terrain_3d_region.cpp" />
     <ClCompile Include="src\terrain_3d_texture_asset.cpp" />
