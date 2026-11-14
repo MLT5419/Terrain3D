@@ -16,7 +16,7 @@ compatibility/default_parent_skeleton_in_mesh_instance_3d=true
 
 config/name="Terrain3D"
 run/main_scene="res://demo/Demo.tscn"
-config/features=PackedStringArray("4.6")
+config/features=PackedStringArray("4.7", "C#")
 config/icon="res://icon.png"
 
 [debug]
@@ -46,5 +46,6 @@ import/blender/enabled=false
 
 [rendering]
 
+rendering_device/driver.windows="d3d12"
 textures/vram_compression/import_etc2_astc=true
 occlusion_culling/use_occlusion_culling=true

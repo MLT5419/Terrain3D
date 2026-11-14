@@ -118,6 +118,18 @@ You can increase `Renderer/Cull Margin`. For sculpted regions this should not be
 
 ## Crashing
 
+### Windows crash in NVIDIA's shader compiler
+
+If Windows Event Viewer names `nvgpucomp64.dll` as the faulting module, compare Vulkan and Direct3D 12 before replacing the Terrain3D library. The demo was reproduced crashing with Godot 4.7, Vulkan and an RTX 4060 Laptop GPU using NVIDIA driver 581.80, while Direct3D 12 opened the same project successfully.
+
+Start Godot with `--rendering-method forward_plus --rendering-driver d3d12`, or add this setting under the existing `[rendering]` section of `project.godot`:
+
+```ini
+rendering_device/driver.windows="d3d12"
+```
+
+Restart the editor after changing the driver. This keeps Forward+ and its decals; it changes the Windows graphics backend. The bundled demo uses this setting. Other projects can choose the backend appropriate to their hardware; see [Godot's rendering driver settings](https://docs.godotengine.org/en/stable/classes/class_projectsettings.html#class-projectsettings-property-rendering-rendering-device-driver-windows).
+
 ### Godot crashes on load
 
 If this is the first startup after installing the plugin, this is normal due to a bug in the engine currently. Restart Godot.

@@ -2,9 +2,13 @@
 
 [ext_resource type="PackedScene" uid="uid://bn5nf4esciwex" path="res://demo/assets/models/LOD5Example.tscn" id="1_4jrdu"]
 [ext_resource type="Texture2D" uid="uid://c88j3oj0lf6om" path="res://demo/assets/textures/rock023_alb_ht.png" id="2_pog6b"]
+[ext_resource type="Terrain3DTextureCache" path="res://demo/data/texture_cache/926d8b67f2534da328016d7894b121a1a33d197853633e91af0a50ca7ecdbbf8_bc7.res" id="2_uyhyi"]
 [ext_resource type="Texture2D" uid="uid://ddprscrpsofah" path="res://demo/assets/textures/ground037_alb_ht.png" id="3_g8f2m"]
 [ext_resource type="Texture2D" uid="uid://dabyathlpy04p" path="res://demo/assets/textures/rock023_nrm_rgh.png" id="3_wncaf"]
+[ext_resource type="Terrain3DTextureCache" path="res://demo/data/texture_cache/926d8b67f2534da328016d7894b121a1a33d197853633e91af0a50ca7ecdbbf8_rgba8.res" id="3_xlng6"]
 [ext_resource type="Texture2D" uid="uid://g80pbqtklcws" path="res://demo/assets/textures/ground037_nrm_rgh.png" id="4_aw5y1"]
+[ext_resource type="Terrain3DTextureCache" path="res://demo/data/texture_cache/98caf9062ffd8978b196f6f7b3a8e1eaf3f7091d0ed5a433b2d63b1f3777b48d_bc7.res" id="6_3wxcx"]
+[ext_resource type="Terrain3DTextureCache" path="res://demo/data/texture_cache/98caf9062ffd8978b196f6f7b3a8e1eaf3f7091d0ed5a433b2d63b1f3777b48d_rgba8.res" id="7_g6711"]
 
 [sub_resource type="StandardMaterial3D" id="StandardMaterial3D_b2vqk"]
 transparency = 4
@@ -38,6 +42,10 @@ lod4_range = 256.0
 
 [sub_resource type="Terrain3DTextureAsset" id="Terrain3DTextureAsset_lha57"]
 name = "Cliff"
+cache_storage = 1
+cache_directory = "res://demo/data/texture_cache"
+_texture_cache = ExtResource("3_xlng6")
+_prepared_cache = ExtResource("2_uyhyi")
 albedo_texture = ExtResource("2_pog6b")
 normal_texture = ExtResource("3_wncaf")
 normal_depth = 1.5
@@ -49,6 +57,10 @@ displacement_scale = 0.65
 [sub_resource type="Terrain3DTextureAsset" id="Terrain3DTextureAsset_od0q7"]
 name = "Grass"
 id = 1
+cache_storage = 1
+cache_directory = "res://demo/data/texture_cache"
+_texture_cache = ExtResource("7_g6711")
+_prepared_cache = ExtResource("6_3wxcx")
 albedo_color = Color(0.67451, 0.74902, 0.686275, 1)
 albedo_texture = ExtResource("3_g8f2m")
 normal_texture = ExtResource("4_aw5y1")
