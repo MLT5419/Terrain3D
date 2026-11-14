@@ -5,10 +5,17 @@
 	<description>
 		Terrain3D is a high performance, editable terrain system for Godot 4. It provides a clipmap based terrain that supports terrains from 64x64m up to 65.5x65.5km with multiple LODs, 32 textures, and editor tools for importing or creating terrains.
 		This class handles mesh generation, and management of the whole system. See [url=https://terrain3d.readthedocs.io/en/stable/docs/system_architecture.html]System Architecture[/url] for design details.
+		Terrain3DLayer script nodes can contribute non-destructive edits. The parent keeps its authored assets separate from the compiled palette returned by [method get_assets]. Height queries use the final composition; layer source resources remain independently editable.
 	</description>
 	<tutorials>
 	</tutorials>
 	<methods>
+		<method name="get_assets" qualifiers="const">
+			<return type="Terrain3DAssets" />
+			<description>
+				Returns the effective rendering palette, including resolved edit-layer slots. Without edit layers it returns [member assets]. Compiled palettes are derived; edit source assets or layer bindings to persist changes.
+			</description>
+		</method>
 		<method name="bake_mesh" qualifiers="const">
 			<return type="Mesh" />
 			<param index="0" name="lod" type="int" />
@@ -137,8 +144,12 @@
 		</method>
 	</methods>
 	<members>
-		<member name="assets" type="Terrain3DAssets" setter="set_assets" getter="get_assets">
+		<member name="assets" type="Terrain3DAssets" setter="set_assets" getter="get_source_assets">
 			The list of texture and mesh assets used by Terrain3D. You can optionally save this as an external [code skip-lint].tres[/code] text file if you wish to share it with Terrain3D nodes in other scenes.
+			With edit layers, this remains the authored base palette. Use [method get_assets] to inspect the resolved rendering palette.
+		</member>
+		<member name="layer_bindings" type="Resource" setter="set_layer_bindings" getter="get_layer_bindings">
+			An optional [code]Terrain3DLayerBindings[/code] script resource that supplies a terrain-wide material skin. Layer instance bindings take precedence; unbound slots fall back to their layer defaults.
 		</member>
 		<member name="buffer_shader_override" type="Shader" setter="set_buffer_shader_override" getter="get_buffer_shader_override">
 		</member>

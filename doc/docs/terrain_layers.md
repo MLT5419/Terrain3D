@@ -1,0 +1,74 @@
+Terrain Edit Layers and Stamps
+=============================
+
+Terrain edit layers keep sculpting and material painting separate from the original terrain. A `Terrain3D` combines their source maps into one result for rendering, height queries and collision. These editing layers are different from the surface entries in `Terrain3DAssets`.
+
+## Getting started
+
+Open `addons/terrain_3d/extras/layers/layers_demo.tscn` for a working example. It instances an independent ground scene and two instances of the same hill Stamp scene. Both hills share their height data; one instance uses a sandstone skin. The source data and materials are separate `.res` files.
+
+1. Add a `Terrain3DPaintLayer` beneath an existing `Terrain3D`, or create a scene whose root is `Terrain3DPaintLayer` or `Terrain3DStamp`.
+2. Use **Create Layer Data**, then save its `Terrain3DLayerData` resource as an external `.res` file. Embedded data is also supported.
+3. Select the layer in the Scene tree. The terrain toolbar edits that layer. Add material entries through its Asset Dock or configure its **Slots** in the Inspector.
+4. Save the layer scene and its external resources. Instance that scene beneath the destination Terrain3D.
+
+Nodes are processed in Scene tree order, from earlier contributions to later contributions. Wrapper nodes are traversed; another Terrain3D starts a separate composition context. **Enabled** controls participation, **Locked** prevents brush editing, and **Erase Mode** removes this layer's coverage to reveal the layers below. The Node3D visibility switch is not the layer enable switch.
+
+The parent owns vertex spacing, region size, mesh LODs, collision and terrain material settings. Fixed-grid paint layers use terrain/world coordinates and keep an identity transform. Use a Stamp for movable content. Region resizing is unavailable while edit layers are active; detach the layers before reslicing the base.
+
+## Height composition
+
+Each source sample has a height value and independent coverage. Untouched samples contribute nothing; an explicitly painted zero can replace the lower height.
+
+* **Add** stores a relative height contribution: `result = lower + height * coverage * height_opacity`.
+* **Replace** blends toward a target height: `result = lerp(lower, height, coverage * height_opacity)`.
+
+Sculpt, Set Height and smoothing read the composition through the selected layer, excluding layers above it, and write back to that layer. Set Height uses the world height shown by the terrain tool. Layers above the selection can still cover the edit. Color and roughness painting are also supported. Region creation/removal, instance painting, holes, navigation, autoshader painting and gradient tools are not layer brushes in this version; existing base terrain remains an input.
+
+The compositor works in affected 32-sample tiles and uploads the affected terrain regions. Moving, disabling or deleting a Stamp also clears its previous footprint. Adding/removing regions rebuilds the GPU map arrays. Structural, binding and source-resource changes may require a broader rebuild. Large layer stacks add CPU and memory cost while authoring; composition is not intended as a per-frame animation system.
+
+## Stamps, pivots and source data
+
+`Terrain3DStamp` stores its content in local coordinates. Position, Y rotation, nonzero X/Z scaling, Y scaling and **Height Scale** affect its contribution. X/Z tilt is rejected because a general rotated surface cannot always be represented by a single height per horizontal position. Painting transforms the brush into source coordinates.
+
+The **Pivot** is measured in source meters. It is independent from **Reference Height**, the source elevation subtracted before height scaling. For example, a mountain with elevations 100–130 can use a reference height of 100 to contribute 0–30 meters. Node Y position adds a masked height offset. No second floating surface is created.
+
+Use **Center Pivot** to center on the stored source sample bounds. It compensates the node position so the existing placement stays fixed. Painting and erasing do not automatically recenter the pivot. Heightmap import centers it explicitly; source sample centers span `(width - 1) * spacing` by `(height - 1) * spacing`.
+
+Assign a **Heightmap** texture and use **Import Heightmap**, or set **Capture Bounds** in world X/Z meters and use **Capture Terrain Region**. Capture takes a snapshot of the current result, including its painted surfaces. It does not create a live link back to that terrain. Adjust Reference Height and Add/Replace mode to choose how the captured elevations should be reused.
+
+Repeated movement and rotation always sample the original data, avoiding cumulative resampling. Height and color use coverage-aware bilinear sampling; packed control values use nearest sampling. Final detail is limited by the parent terrain's vertex spacing. Painted UV angle is currently world oriented rather than continuously rotated with the Stamp.
+
+Duplicated scene instances share their data resource by default. **Make Data Unique** creates an independent copy; save that copy to its own file. Brush undo stores copies of the changed source chunks and preserves the external resource's identity. Inspector properties and node transforms use the editor's ordinary undo history.
+
+## Material slots and skins
+
+A `Terrain3DLayerSlot` declares a stable **Key**, an optional **Default Resource**, and an optional **Preview Resource**. The resources are normal `Terrain3DTextureAsset` objects, supporting both texture inputs and PBR material inputs.
+
+Source control maps use local slot indices. Keep painted slot order stable: reordering or deleting an entry changes the meaning of existing paint. Slot keys can use namespaces such as `surface.ground` or `ruins.special_stone`.
+
+`Terrain3DLayerBindings` is an external resource containing a material dictionary. Assign it to a layer instance for a local skin, or to the parent's **Layer Bindings** for a terrain-wide skin. Resolution follows:
+
+`instance binding → parent binding → slot default`
+
+An unattached layer additionally allows its Preview Resource for editing. Preview resources are not implicit defaults for an attached layer or an export. Missing bindings are shown as composition errors. A slot-only prefab without defaults remains an authoring template; bind and place it before exporting a usable standalone terrain.
+
+The final palette is generated from the parent's authored assets and the actually painted, enabled layer slots. The same resource reference is reused; different resources remain separate even if their images match, because UV scale, tint and other terrain parameters can differ. Compilation copies asset metadata and remaps local IDs only in the final control map. It never assigns global IDs back into source assets or rewrites a shared layer's paint.
+
+The existing limit remains **32 final terrain materials**, including authored base entries. Resource declarations do not expand the shader's capacity. The control format also still holds two surface IDs per control point. Material painting is categorical coverage/override with erase-to-reveal behavior; arbitrary transparent mixing of multiple edit layers is not supported. Source control pairs and their internal blend values can be retained when capturing terrain.
+
+## Independent scenes and persistence
+
+Without a containing Terrain3D, a layer creates a temporary terrain host using **Preview Vertex Spacing** and an optional **Preview Material**. The host uses the same compositor and renderer; it is internal and is not saved in the layer scene. On attachment to a parent terrain, the standalone host is removed.
+
+Source maps use sparse 64×64 chunks with separate height/control/color coverage. Keep each collaborator's `.tscn`, source `.res` files, defaults and skin resources independent. Adding a default material to one layer does not require editing the parent asset list. A shared skin is still a shared file and should be coordinated like any other shared resource.
+
+Existing base region files remain the base. Saving through Terrain3DData writes those original regions, not the derived result. Layer-only worlds do not require a base data directory. Direct height, region and import mutations on composed Terrain3DData are rejected; edit the selected layer or its source API instead. Read APIs return the final terrain. Returned Image/Region references must not be modified as a way to bypass the source model.
+
+`Terrain3DLayerData.set_pixel()` writes height or color samples. For packed material IDs, call `begin_edit()`, `set_control()` and `end_edit()`; the integer bits must not be filtered as float values. Source spacing is expressed in meters and is independent of the destination grid. Save after preparing source scenes before running them directly from the editor.
+
+## Export
+
+Keep the Terrain3D editor plugin enabled. Export composes placed layers using their actual bindings and saves a platform-cooked bake containing final regions and a final asset palette. Authored layer nodes become plain scene markers; standalone layers receive an ordinary baked Terrain3D. Runtime does not execute the authoring stack or need image encoders for the baked result.
+
+Selected bake and texture `.res` dependencies are explicitly staged, including when Godot reuses cached scene customization. Source maps, slot tables and preview resources are removed from these baked scene dependencies. An Export All Resources preset can still package authoring files that it explicitly includes elsewhere. Re-export after editing geometry, bindings or layer settings. Runtime layer recomposition, changing baked skins, vegetation layers, procedural generators and spline layers are outside this version's authoring workflow.

@@ -22,9 +22,11 @@ var godot_editor_viewport_container: Node # The Node3DEditorViewportContainer th
 var viewport: SubViewport # Viewport the mouse was last in
 var mouse_in_main: bool = false # Helper to track when mouse is in the editor vp
 var export_plugin: EditorExportPlugin = ExportPlugin.new()
+var layer_gizmo: EditorNode3DGizmoPlugin
 
 # Terrain
 var terrain: Terrain3D
+var active_layer: Terrain3DLayer
 var _last_terrain: Terrain3D
 var nav_region: NavigationRegion3D
 
@@ -77,6 +79,8 @@ func _enter_tree() -> void:
 	asset_dock.initialize(self)
 	export_plugin.plugin = self
 	add_export_plugin(export_plugin)
+	layer_gizmo = preload("res://addons/terrain_3d/src/layers/terrain_3d_layer_gizmo.gd").new()
+	add_node_3d_gizmo_plugin(layer_gizmo)
 
 
 func _exit_tree() -> void:
@@ -90,6 +94,7 @@ func _exit_tree() -> void:
 	scene_changed.disconnect(_on_scene_changed)
 	godot_editor_window.focus_entered.disconnect(_on_godot_focus_entered)
 	remove_export_plugin(export_plugin)
+	remove_node_3d_gizmo_plugin(layer_gizmo)
 
 
 func _on_godot_focus_entered() -> void:
@@ -107,7 +112,7 @@ func _on_godot_focus_entered() -> void:
 # Click NavRegion3D, Terrain3D:		_handles(Terrain3D), _make_visible(true), _edit(Terrain3D)
 # Click Terrain3D, NavRegion3D:		_handles(NavReg3D), _make_visible(true), _edit(NavReg3D)
 func _handles(p_object: Object) -> bool:
-	if p_object is Terrain3D:
+	if p_object is Terrain3D or p_object is Terrain3DLayer:
 		return true
 	elif p_object is NavigationRegion3D and is_instance_valid(_last_terrain):
 		return true
@@ -126,15 +131,24 @@ func _edit(p_object: Object) -> void:
 	if !p_object:
 		_clear()
 
-	if p_object is Terrain3D:
-		if p_object == terrain:
+	var layer := p_object as Terrain3DLayer
+	var target := p_object as Terrain3D
+	if layer:
+		layer._ensure_host()
+		target = layer.get_terrain()
+	if target:
+		if target == terrain and layer == active_layer:
 			return
-		terrain = p_object
+		if editor.is_operating():
+			editor.stop_operation()
+		active_layer = layer
+		terrain = target
 		_last_terrain = terrain
 		terrain.set_plugin(self)
 		terrain.set_editor(editor)
 		debug = terrain.debug_level
 		editor.set_terrain(terrain)
+		editor.set_active_layer(active_layer)
 		terrain.set_meta("_edit_lock_", true)
 		ui.set_visible(true)
 
@@ -164,6 +178,11 @@ func _make_visible(p_visible: bool, p_redraw: bool = false) -> void:
 
 
 func _clear() -> void:
+	if editor and editor.is_operating():
+		editor.stop_operation()
+	active_layer = null
+	if editor:
+		editor.set_active_layer(null)
 	if is_terrain_valid():
 		editor.set_tool(Terrain3DEditor.TOOL_MAX)
 		editor.set_operation(Terrain3DEditor.OP_MAX)
@@ -211,7 +230,13 @@ func _forward_3d_gui_input(p_viewport_camera: Camera3D, p_event: InputEvent) -> 
 	#Else look for intersection with terrain
 	var intersection_point: Vector3 = terrain.get_intersection(camera_pos, camera_dir, true)
 	if intersection_point.z > 3.4e38 or is_nan(intersection_point.y): # max double or nan
-		return AFTER_GUI_INPUT_PASS
+		if not is_instance_valid(active_layer) or absf(camera_dir.y) < 0.00001:
+			return AFTER_GUI_INPUT_PASS
+		var plane_height: float = active_layer.global_position.y if active_layer.uses_local_transform() else 0.0
+		var distance := (plane_height - camera_pos.y) / camera_dir.y
+		if distance < 0:
+			return AFTER_GUI_INPUT_PASS
+		intersection_point = camera_pos + camera_dir * distance
 	mouse_global_position = intersection_point
 	
 	## Handle mouse movement
@@ -444,9 +469,15 @@ func is_selected() -> bool:
 	var selected: Array[Node] = EditorInterface.get_selection().get_selected_nodes()
 	for node in selected:
 		if ( is_instance_valid(_last_terrain) and node.get_instance_id() == _last_terrain.get_instance_id() ) or \
-			node is Terrain3D:
+			node is Terrain3D or node is Terrain3DLayer:
 				return true
 	return false	
+
+
+func get_edit_assets() -> Terrain3DAssets:
+	if is_instance_valid(active_layer):
+		return active_layer.get_edit_assets()
+	return terrain.assets if is_instance_valid(terrain) else null
 
 
 func select_terrain() -> void:
@@ -499,7 +530,7 @@ func erase_setting(p_str: String) -> void:
 
 
 func create_undo_action(p_action_name: String) -> void:
-	get_undo_redo().create_action(p_action_name, UndoRedo.MERGE_DISABLE, terrain)
+	get_undo_redo().create_action(p_action_name, UndoRedo.MERGE_DISABLE, active_layer if is_instance_valid(active_layer) else terrain)
 
 
 func add_undo_method(p_method: Callable) -> void:

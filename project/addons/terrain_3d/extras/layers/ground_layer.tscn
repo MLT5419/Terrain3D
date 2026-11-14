@@ -1,0 +1,15 @@
+[gd_scene format=3 uid="uid://y2orre7v1udr"]
+
+[ext_resource type="Script" uid="uid://n0ocuxt4w227" path="res://addons/terrain_3d/src/layers/terrain_3d_paint_layer.gd" id="1_lu8mk"]
+[ext_resource type="Resource" uid="uid://big1drwy3ekk6" path="res://addons/terrain_3d/extras/layers/ground_data.res" id="2_wjcvb"]
+[ext_resource type="Script" uid="uid://b0106nltwake7" path="res://addons/terrain_3d/src/layers/terrain_3d_layer_slot.gd" id="3_fidxx"]
+[ext_resource type="Terrain3DTextureAsset" uid="uid://bmx1u470okygm" path="res://addons/terrain_3d/extras/layers/grass.res" id="4_6o22u"]
+
+[sub_resource type="Resource" id="Resource_0l8gp"]
+script = ExtResource("3_fidxx")
+default_resource = ExtResource("4_6o22u")
+
+[node name="Ground" type="Node3D" unique_id=1870966017]
+script = ExtResource("1_lu8mk")
+data = ExtResource("2_wjcvb")
+slots = Array[ExtResource("3_fidxx")]([SubResource("Resource_0l8gp")])

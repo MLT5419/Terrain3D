@@ -82,6 +82,7 @@ See the team in :doc:`docs/authors` and displayed on `github contributors <https
    :caption: Basic Usage
 
    docs/texture_prep
+   docs/terrain_layers
    docs/texture_painting
    docs/heightmaps
    docs/import_export

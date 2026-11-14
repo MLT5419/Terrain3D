@@ -291,7 +291,7 @@ func set_dock_mode(tool: Terrain3DEditor.Tool) -> void:
 	textures_btn.set_pressed_no_signal(!mesh_mode)
 	current_list.update_asset_list()
 	if plugin.is_terrain_valid():
-		EditorInterface.edit_node(plugin.terrain)
+		EditorInterface.edit_node(plugin.active_layer if is_instance_valid(plugin.active_layer) else plugin.terrain)
 	save_editor_settings()
 	_updating_list = false
 	

@@ -54,6 +54,12 @@ Dictionary Terrain3DCollision::_get_shape_data(const Vector2i &p_position, const
 		}
 	}
 
+	// Sparse layer/stamp regions can contain collision cells made entirely of holes.
+	// Physics heightfields require a finite range even when every sample is NaN.
+	if (min_height > max_height) {
+		return Dictionary();
+	}
+
 	// Non rotated shape for normal array index above
 	//Transform3D xform = Transform3D(Basis(), global_pos);
 	// Rotated shape Y=90 for -90 rotated array index
@@ -361,7 +367,8 @@ void Terrain3DCollision::update(const Vector2i &p_region_loc, const bool p_rebui
 			Vector2i shape_pos = region_loc * region_size;
 			Dictionary shape_data = _get_shape_data(shape_pos, region_size);
 			if (shape_data.is_empty()) {
-				LOG(ERROR, "Can't get shape data for ", region_loc);
+				_shape_set_disabled(i, true);
+				LOG(DEBUG, "No collision surface for ", region_loc);
 				continue;
 			}
 			Transform3D xform = shape_data["xform"];

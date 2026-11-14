@@ -1,0 +1,83 @@
+[gd_scene format=3 uid="uid://b2kpiib1501nm"]
+
+[ext_resource type="PackedScene" uid="uid://y2orre7v1udr" path="res://addons/terrain_3d/extras/layers/ground_layer.tscn" id="1_hakox"]
+[ext_resource type="PackedScene" uid="uid://cj8skik2db4a6" path="res://addons/terrain_3d/extras/layers/hill_stamp.tscn" id="2_u6rlq"]
+[ext_resource type="Resource" uid="uid://bmu0bca1he35f" path="res://addons/terrain_3d/extras/layers/sandstone_skin.tres" id="3_hiona"]
+
+[sub_resource type="Terrain3DMaterial" id="Terrain3DMaterial_0leqx"]
+_shader_parameters = {
+&"bias_distance": null,
+&"blend_sharpness": null,
+&"depth_blur": null,
+&"distant_normal_scale": null,
+&"flat_terrain_normals": null,
+&"general_uniforms": null,
+&"ground_level": null,
+&"mipmap_bias": null,
+&"mipmaps": null,
+&"private": null,
+&"region_blend": null
+}
+world_background = 0
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_ygu56"]
+transparency = 4
+cull_mode = 2
+vertex_color_use_as_albedo = true
+backlight_enabled = true
+backlight = Color(0.5, 0.5, 0.5, 1)
+distance_fade_mode = 1
+distance_fade_min_distance = 128.0
+distance_fade_max_distance = 96.0
+metadata/terrain3d_generated_material = true
+
+[sub_resource type="Terrain3DMeshAsset" id="Terrain3DMeshAsset_kro8o"]
+generated_type = 1
+height_offset = 0.5
+density = 10.0
+material_override = SubResource("StandardMaterial3D_ygu56")
+last_lod = 0
+last_shadow_lod = 0
+lod0_range = 128.0
+
+[sub_resource type="Terrain3DAssets" id="Terrain3DAssets_5g2ek"]
+mesh_list = Array[Terrain3DMeshAsset]([SubResource("Terrain3DMeshAsset_kro8o")])
+texture_resolution = 256
+
+[sub_resource type="Environment" id="Environment_w28e6"]
+background_mode = 1
+background_color = Color(0.15, 0.19, 0.24, 1)
+ambient_light_source = 2
+ambient_light_color = Color(0.8, 0.87, 1, 1)
+ambient_light_energy = 0.5
+
+[node name="TerrainLayersExample" type="Node3D" unique_id=393506202]
+
+[node name="Terrain" type="Terrain3D" parent="." unique_id=1375970094]
+material = SubResource("Terrain3DMaterial_0leqx")
+assets = SubResource("Terrain3DAssets_5g2ek")
+displacement_sharpness = 0.5
+free_editor_textures = false
+top_level = true
+metadata/_edit_lock_ = true
+
+[node name="Ground" parent="Terrain" unique_id=1870966017 instance=ExtResource("1_hakox")]
+metadata/_edit_lock_ = true
+
+[node name="StoneHill" parent="Terrain" unique_id=19965711 instance=ExtResource("2_u6rlq")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -10, 0, -5)
+
+[node name="SandstoneHill" parent="Terrain" unique_id=1010679781 instance=ExtResource("2_u6rlq")]
+transform = Transform3D(1.1468129, 0, 0.57357645, 0, 0.7, 0, -0.803007, 0, 0.81915206, 11, 0, 5)
+bindings = ExtResource("3_hiona")
+
+[node name="Camera3D" type="Camera3D" parent="." unique_id=2053049847]
+transform = Transform3D(0.7219882, -0.30762687, 0.61975706, 0, 0.89572513, 0.4446083, -0.6919054, -0.32100195, 0.646703, 46, 34, 48)
+current = true
+
+[node name="Sun" type="DirectionalLight3D" parent="." unique_id=1558736882]
+transform = Transform3D(0.81915206, 0.46984634, -0.32898995, 0, 0.57357645, 0.81915206, 0.57357645, -0.6710101, 0.46984634, 0, 0, 0)
+shadow_enabled = true
+
+[node name="WorldEnvironment" type="WorldEnvironment" parent="." unique_id=996377757]
+environment = SubResource("Environment_w28e6")
