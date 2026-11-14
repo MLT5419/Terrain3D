@@ -27,3 +27,4 @@ func apply(host: Terrain3D) -> void:
 	for region in regions:
 		host.data.add_region(region.duplicate(true), false)
 	host.data.update_maps()
+	host.get_instancer().update_mmis(-1, Vector2i(2147483647, 2147483647), true)

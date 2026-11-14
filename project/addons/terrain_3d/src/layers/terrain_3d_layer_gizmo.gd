@@ -15,9 +15,9 @@ func _get_gizmo_name() -> String:
 func _redraw(gizmo: EditorNode3DGizmo) -> void:
 	gizmo.clear()
 	var layer := gizmo.get_node_3d() as Terrain3DLayer
-	if not layer.data:
+	if not layer.data and not layer.scatter_data:
 		return
-	var rect := layer.data.get_bounds()
+	var rect := layer.source_content_bounds()
 	var points := PackedVector3Array()
 	var corners := [rect.position, Vector2(rect.end.x, rect.position.y), rect.end, Vector2(rect.position.x, rect.end.y)]
 	for index in 4:

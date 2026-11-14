@@ -54,11 +54,16 @@ func update_asset_list() -> void:
 		return
 	
 	if type == Terrain3DAssets.TYPE_TEXTURE:
-		asset_list = plugin.get_edit_assets().get_texture_list()
+		var assets: Terrain3DAssets = plugin.get_edit_assets()
+		if not assets:
+			return
+		asset_list = assets.get_texture_list()
 	else:
-		if plugin.terrain:
-			plugin.terrain.assets.create_mesh_thumbnails()
-		asset_list = t.assets.get_mesh_list()
+		var assets: Terrain3DAssets = plugin.get_edit_assets()
+		if not assets:
+			return
+		assets.create_mesh_thumbnails()
+		asset_list = assets.get_mesh_list()
 	update_list_entries()
 
 
@@ -124,8 +129,11 @@ func add_list_entry(p_resource: Resource = null) -> void:
 	var res_id: int = p_resource.id if p_resource else _entries.size()
 	# Add to the mapping to look up later 
 	_entry_idx_to_asset_id_map[_entries.size()] = res_id
+	entry.set_meta("_terrain3d_local_id", res_id)
 	
 	entry.type = type
+	entry.layer_instances = is_instance_valid(plugin.active_layer) and type == Terrain3DAssets.TYPE_MESH
+	entry.local_palette = is_instance_valid(plugin.active_layer)
 	entry.hovered.connect(_on_resource_hovered.bind(res_id))
 	entry.clicked.connect(_on_entry_clicked.bind(_entries.size()))
 	entry.edit_clicked.connect(_on_edit_clicked)
@@ -141,7 +149,7 @@ func add_list_entry(p_resource: Resource = null) -> void:
 func _on_resource_hovered(p_id: int):
 	if type == Terrain3DAssets.TYPE_MESH:
 		if plugin.terrain:
-			plugin.terrain.assets.create_mesh_thumbnails(p_id, Vector2i(512, 512), true)
+			plugin.get_edit_assets().create_mesh_thumbnails(p_id, Vector2i(512, 512), true)
 
 
 func set_selected_after_swap(p_type: Terrain3DAssets.AssetType, p_old_id: int, p_new_id: int) -> void:
@@ -210,10 +218,13 @@ func update_selection() -> void:
 	
 
 func _on_edit_clicked(p_entry: Terrain3DListEntry) -> void:
-	selected_list = [ p_entry.resource.id ]
+	var id: int = p_entry.get_meta("_terrain3d_local_id", p_entry.resource.id) if is_instance_valid(plugin.active_layer) else p_entry.resource.id
+	selected_list = [id]
 	update_selection()
 	if is_instance_valid(plugin.active_layer) and type == Terrain3DAssets.TYPE_TEXTURE:
-		EditorInterface.edit_resource(plugin.active_layer.slots[p_entry.resource.id])
+		EditorInterface.edit_resource(plugin.active_layer.slots[id])
+	elif is_instance_valid(plugin.active_layer) and type == Terrain3DAssets.TYPE_MESH:
+		EditorInterface.edit_resource(plugin.active_layer.instance_slots[id])
 	else:
 		EditorInterface.edit_resource(p_entry.resource)
 
@@ -247,6 +258,17 @@ func _on_clear_clicked(p_entry: Terrain3DListEntry) -> void:
 		
 func _on_enable_clicked(p_entry: Terrain3DListEntry) -> void:
 	if not p_entry.resource:
+		return
+	if is_instance_valid(plugin.active_layer):
+		var layer: Terrain3DLayer = plugin.active_layer
+		var before := layer.instance_slots.duplicate()
+		var after := before.duplicate()
+		for index in after.size():
+			if index == p_entry.resource.id or (selected_list.has(p_entry.resource.id) and selected_list.has(index)):
+				after[index] = before[index].duplicate()
+				after[index].enabled = not p_entry.enabled
+		layer.commit_configuration("Toggle Layer Instance Slots", {"instance_slots": before}, {"instance_slots": after})
+		update_asset_list()
 		return
 	var enable_state: bool = p_entry.enabled
 	if p_entry.resource.id in selected_list:
@@ -289,20 +311,40 @@ func clear_resources(p_asset_ids: Array[int]) -> void:
 
 func update_resource(p_resource: Resource, p_id: int) -> void:
 	if is_instance_valid(plugin.active_layer):
-		if type != Terrain3DAssets.TYPE_TEXTURE:
-			return
 		var layer: Terrain3DLayer = plugin.active_layer
-		if p_id < layer.slots.size():
-			if not p_resource:
-				push_warning("Clear a layer's paint with Erase Mode. Removing or reordering painted slots changes their meaning.")
-				return
-			layer.slots[p_id].default_resource = p_resource
+		if not p_resource:
+			push_warning("Erase the layer's painted content instead of removing a stable slot. Disable an instance slot to hide it.")
+			return
+		if type == Terrain3DAssets.TYPE_MESH:
+			var before := layer.instance_slots.duplicate()
+			var after := before.duplicate()
+			var slot := before[p_id].duplicate() as Terrain3DInstanceSlot if p_id < before.size() else Terrain3DInstanceSlot.new()
+			if slot.key.is_empty():
+				slot.key = StringName("%s.instance_%s" % [layer.name.to_snake_case(), p_id])
+			if p_resource is PackedScene:
+				slot.kind = Terrain3DInstanceSlot.Kind.SCENE
+				slot.default_scene = p_resource
+			else:
+				slot.kind = Terrain3DInstanceSlot.Kind.MESH
+				slot.default_mesh = p_resource
+			if p_id < after.size():
+				after[p_id] = slot
+			else:
+				after.append(slot)
+			layer.commit_configuration("Set Layer Instance Slot", {"instance_slots": before}, {"instance_slots": after})
+		elif p_id < layer.slots.size():
+			var before := layer.slots.duplicate()
+			var after := before.duplicate()
+			after[p_id] = before[p_id].duplicate()
+			after[p_id].default_resource = p_resource
+			layer.commit_configuration("Set Layer Material Slot", {"slots": before}, {"slots": after})
 		else:
 			var slot := Terrain3DLayerSlot.new()
 			slot.key = StringName("%s.material_%s" % [layer.name.to_snake_case(), p_id])
 			slot.default_resource = p_resource
-			layer.slots.append(slot)
-		layer._changed()
+			var after := layer.slots.duplicate()
+			after.append(slot)
+			layer.commit_configuration("Add Layer Material Slot", {"slots": layer.slots.duplicate()}, {"slots": after})
 		EditorInterface.mark_scene_as_unsaved()
 		update_asset_list()
 		return

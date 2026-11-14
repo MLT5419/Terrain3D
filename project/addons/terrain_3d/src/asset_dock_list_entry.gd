@@ -13,7 +13,10 @@ signal highlight_clicked(entry: Terrain3DListEntry)
 
 var resource: Resource
 var type := Terrain3DAssets.TYPE_TEXTURE
+var layer_instances := false
+var local_palette := false
 var _thumbnail: Texture2D
+var _scene_thumbnail: Texture2D
 var drop_data: bool = false
 var is_hovered: bool = false
 var is_selected: bool = false
@@ -48,6 +51,9 @@ func _ready() -> void:
 	add_theme_constant_override("margin_right", 5)
 
 	if resource:
+		var scene: PackedScene = resource.get_meta("_terrain3d_scene_preview") if resource.has_meta("_terrain3d_scene_preview") else null
+		if scene:
+			EditorInterface.get_resource_previewer().queue_edited_resource_preview(scene, self, &"_on_scene_preview", null)
 		set_highlighted(resource.is_highlighted())
 		if resource is Terrain3DMeshAsset:
 			set_enabled(resource.is_enabled())
@@ -93,6 +99,8 @@ func setup_buttons() -> void:
 	button_highlight.set_custom_minimum_size(icon_size)
 	button_highlight.set_h_size_flags(Control.SIZE_SHRINK_END)
 	button_highlight.set_visible(resource != null)
+	if layer_instances:
+		button_highlight.hide()
 	button_highlight.tooltip_text = "Highlight " + ( "Instances" if type == Terrain3DAssets.TYPE_MESH else "Texture" )
 	button_highlight.toggle_mode = true
 	button_highlight.mouse_filter = Control.MOUSE_FILTER_PASS
@@ -204,7 +212,7 @@ func update_count_label() -> void:
 	if not mesh_resource:
 		count_label.text = str(0)
 	else:
-		count_label.text = _format_number(mesh_resource.get_instance_count())
+		count_label.text = _format_number(mesh_resource.get_meta("_terrain3d_source_count", mesh_resource.get_instance_count()))
 
 
 func _notification(p_what) -> void:
@@ -221,7 +229,9 @@ func _notification(p_what) -> void:
 				draw_texture(add_icon, (get_size() / 2) - (add_icon.get_size() / 2))
 			else:
 				button_row.visible = true
-				_thumbnail = resource.get_thumbnail()
+				_thumbnail = _scene_thumbnail if _scene_thumbnail else resource.get_thumbnail()
+				if resource.has_meta("_terrain3d_scene_preview") and not _scene_thumbnail:
+					_thumbnail = get_theme_icon("PackedScene", "EditorIcons")
 				if _thumbnail:
 					draw_texture_rect(_thumbnail, rect, false)
 					texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST_WITH_MIPMAPS
@@ -305,16 +315,19 @@ func _drop_data(p_at_position: Vector2, p_data: Variant) -> void:
 			set_edited_resource(ta, false)
 			resource = ta
 		elif res is Terrain3DTextureAsset and type == Terrain3DAssets.TYPE_TEXTURE:
-			if resource is Terrain3DTextureAsset:
+			if resource is Terrain3DTextureAsset and not local_palette:
 				res.id = resource.id
 			set_edited_resource(res, false)
 		elif res is PackedScene and type == Terrain3DAssets.TYPE_MESH:
+			if layer_instances:
+				changed.emit(res)
+				return
 			if not resource:
 				resource = Terrain3DMeshAsset.new()		
 			set_edited_resource(resource, false)
 			resource.set_scene_file(res)
 		elif res is Terrain3DMeshAsset and type == Terrain3DAssets.TYPE_MESH:
-			if resource is Terrain3DMeshAsset:
+			if resource is Terrain3DMeshAsset and not layer_instances:
 				res.id = resource.id
 			set_edited_resource(res, false)
 		else:
@@ -350,6 +363,10 @@ func set_edited_resource(p_res: Resource, p_no_signal: bool = true) -> void:
 func _on_resource_changed(_value: int = 0) -> void:
 	queue_redraw()
 	changed.emit(resource)
+
+func _on_scene_preview(_path: String, preview: Texture2D, _small: Texture2D, _userdata: Variant) -> void:
+	_scene_thumbnail = preview
+	queue_redraw()
 
 
 func set_selected(value: bool) -> void:

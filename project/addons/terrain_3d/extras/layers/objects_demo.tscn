@@ -1,0 +1,283 @@
+[gd_scene format=3 uid="uid://u2l84chr3kow"]
+
+[ext_resource type="PackedScene" uid="uid://y2orre7v1udr" path="res://addons/terrain_3d/extras/layers/ground_layer.tscn" id="1_fhenu"]
+[ext_resource type="Script" uid="uid://n0ocuxt4w227" path="res://addons/terrain_3d/src/layers/terrain_3d_paint_layer.gd" id="2_qtm2v"]
+[ext_resource type="Resource" uid="uid://big1drwy3ekk6" path="res://addons/terrain_3d/extras/layers/ground_data.res" id="3_2da4t"]
+[ext_resource type="Script" uid="uid://b0106nltwake7" path="res://addons/terrain_3d/src/layers/terrain_3d_layer_slot.gd" id="4_j7iyr"]
+[ext_resource type="Terrain3DTextureAsset" uid="uid://bmx1u470okygm" path="res://addons/terrain_3d/extras/layers/grass.res" id="5_lmwcp"]
+[ext_resource type="Script" uid="uid://buauoey8v3lv8" path="res://addons/terrain_3d/src/objects/terrain_3d_attachment_settings.gd" id="6_efxw6"]
+[ext_resource type="PackedScene" uid="uid://cj8skik2db4a6" path="res://addons/terrain_3d/extras/layers/hill_stamp.tscn" id="7_xynm5"]
+[ext_resource type="Script" uid="uid://d4a1nqme2480" path="res://addons/terrain_3d/src/layers/terrain_3d_stamp.gd" id="8_d3hqs"]
+[ext_resource type="Resource" uid="uid://dlvv8megumdh7" path="res://addons/terrain_3d/extras/layers/hill_data.res" id="9_y5p3d"]
+[ext_resource type="Terrain3DTextureAsset" uid="uid://veus1mjon6fm" path="res://addons/terrain_3d/extras/layers/stone.res" id="10_0qt4s"]
+[ext_resource type="PackedScene" uid="uid://drfbffr7y3per" path="res://addons/terrain_3d/extras/layers/forest_patch.tscn" id="11_60pa3"]
+[ext_resource type="Resource" uid="uid://dae6cww7kct63" path="res://addons/terrain_3d/extras/layers/forest_ground.res" id="12_2pcwr"]
+[ext_resource type="Resource" uid="uid://bv3h3m3d863ie" path="res://addons/terrain_3d/extras/layers/forest_instances.res" id="13_hv0is"]
+[ext_resource type="Script" uid="uid://gcb62detrtpx" path="res://addons/terrain_3d/src/objects/terrain_3d_instance_slot.gd" id="14_g8qr4"]
+[ext_resource type="Terrain3DMeshAsset" uid="uid://cwle1uyt2yp8x" path="res://addons/terrain_3d/extras/layers/scatter_tree.tres" id="15_nufsj"]
+[ext_resource type="PackedScene" uid="uid://dkwp0mx68qgf2" path="res://addons/terrain_3d/extras/layers/scatter_cabin.tscn" id="16_4e7rb"]
+[ext_resource type="Resource" uid="uid://xa5cemxu647a" path="res://addons/terrain_3d/extras/layers/rock_patch_skin.tres" id="17_wflw4"]
+[ext_resource type="Resource" uid="uid://cxoohqww3h2ji" path="res://addons/terrain_3d/extras/layers/clearing_instances.res" id="18_a2vmn"]
+[ext_resource type="Script" uid="uid://cyye2ss8d2w5y" path="res://addons/terrain_3d/src/objects/terrain_3d_attachment_group.gd" id="19_p8xgk"]
+[ext_resource type="Script" uid="uid://cc1gy4ni33alv" path="res://addons/terrain_3d/src/objects/terrain_3d_attachment_data.gd" id="20_6i60u"]
+[ext_resource type="PackedScene" uid="uid://bd76l3soncvr0" path="res://addons/terrain_3d/extras/layers/scatter_rock.tscn" id="21_xkvqg"]
+
+[sub_resource type="Terrain3DMaterial" id="Terrain3DMaterial_yf3y3"]
+_shader_parameters = {
+&"bias_distance": null,
+&"blend_sharpness": null,
+&"depth_blur": null,
+&"distant_normal_scale": null,
+&"flat_terrain_normals": null,
+&"general_uniforms": null,
+&"mipmap_bias": null,
+&"mipmaps": null,
+&"private": null
+}
+world_background = 0
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_ksk3t"]
+transparency = 4
+cull_mode = 2
+vertex_color_use_as_albedo = true
+backlight_enabled = true
+backlight = Color(0.5, 0.5, 0.5, 1)
+distance_fade_mode = 1
+distance_fade_min_distance = 128.0
+distance_fade_max_distance = 96.0
+metadata/terrain3d_generated_material = true
+
+[sub_resource type="Terrain3DMeshAsset" id="Terrain3DMeshAsset_o72d7"]
+generated_type = 1
+height_offset = 0.5
+density = 10.0
+material_override = SubResource("StandardMaterial3D_ksk3t")
+last_lod = 0
+last_shadow_lod = 0
+lod0_range = 128.0
+
+[sub_resource type="Terrain3DAssets" id="Terrain3DAssets_eco75"]
+mesh_list = Array[Terrain3DMeshAsset]([SubResource("Terrain3DMeshAsset_o72d7")])
+texture_resolution = 256
+
+[sub_resource type="Resource" id="Resource_0l8gp"]
+script = ExtResource("4_j7iyr")
+default_resource = ExtResource("5_lmwcp")
+
+[sub_resource type="Resource" id="Resource_vg2sq"]
+script = ExtResource("6_efxw6")
+mode = 1
+support_points = PackedVector3Array()
+
+[sub_resource type="Resource" id="Resource_7mh4w"]
+script = ExtResource("4_j7iyr")
+key = &"surface.rock"
+default_resource = ExtResource("10_0qt4s")
+
+[sub_resource type="Resource" id="Resource_pchbr"]
+script = ExtResource("6_efxw6")
+mode = 1
+support_points = PackedVector3Array()
+
+[sub_resource type="Resource" id="Resource_hykmd"]
+script = ExtResource("14_g8qr4")
+key = &"nature.tall"
+default_mesh = ExtResource("15_nufsj")
+
+[sub_resource type="Resource" id="Resource_g7ad0"]
+script = ExtResource("14_g8qr4")
+key = &"props.cabin"
+category = &"building"
+kind = 1
+default_scene = ExtResource("16_4e7rb")
+
+[sub_resource type="Resource" id="Resource_xdgmj"]
+script = ExtResource("6_efxw6")
+mode = 1
+support_points = PackedVector3Array()
+
+[sub_resource type="Resource" id="Resource_75is3"]
+script = ExtResource("6_efxw6")
+mode = 1
+support_points = PackedVector3Array()
+
+[sub_resource type="Resource" id="Resource_dtty3"]
+script = ExtResource("6_efxw6")
+mode = 1
+support_points = PackedVector3Array()
+
+[sub_resource type="Resource" id="Resource_6rwv3"]
+resource_local_to_scene = true
+script = ExtResource("20_6i60u")
+records = {
+"2a8a5b48e1b7e0d56fb75461": {
+"captured": true,
+"offset": 0.0,
+"rest": Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -1, 0, 11),
+"visible": true
+},
+"3ea4d8c31f0963507f031ca5": {
+"captured": true,
+"offset": 0.0,
+"rest": Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -3, 0, 11),
+"visible": true
+},
+"8a32ef8b605d4438dcfcfba2": {
+"captured": true,
+"offset": 0.0,
+"rest": Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 3, 0, 11),
+"visible": true
+},
+"dcffd35fa53e8de89f3db414": {
+"captured": true,
+"offset": 0.0,
+"rest": Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 1, 0, 11),
+"visible": true
+},
+"e57d4237e80a681c41cc9294": {
+"captured": true,
+"offset": 0.0,
+"rest": Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -5, 0, 11),
+"visible": true
+},
+"ff21d6f553c8e6ce0445515b": {
+"captured": true,
+"offset": 0.0,
+"rest": Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 5, 0, 11),
+"visible": true
+}
+}
+
+[sub_resource type="Resource" id="Resource_lrfln"]
+script = ExtResource("6_efxw6")
+mode = 3
+support_points = PackedVector3Array(-1.8, 0, -1.6, 1.8, 0, -1.6, -1.8, 0, 1.6, 1.8, 0, 1.6)
+
+[sub_resource type="Resource" id="Resource_tr028"]
+resource_local_to_scene = true
+script = ExtResource("20_6i60u")
+records = {
+"self": {
+"captured": true,
+"offset": 0.0,
+"rest": Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 1, 0, -10),
+"visible": true
+}
+}
+
+[sub_resource type="Environment" id="Environment_0mbof"]
+background_mode = 1
+background_color = Color(0.5686275, 0.7176471, 0.8117647, 1)
+ambient_light_source = 2
+ambient_light_color = Color(0.7647059, 0.8235294, 0.85490197, 1)
+ambient_light_energy = 0.6
+
+[node name="ObjectsDemo" type="Node3D" unique_id=490836442]
+
+[node name="Terrain" type="Terrain3D" parent="." unique_id=1685396080]
+material = SubResource("Terrain3DMaterial_yf3y3")
+assets = SubResource("Terrain3DAssets_eco75")
+displacement_sharpness = 0.5
+free_editor_textures = false
+top_level = true
+metadata/_edit_lock_ = true
+
+[node name="Ground" type="Node3D" parent="Terrain" unique_id=1870966017 instance=ExtResource("1_fhenu")]
+script = ExtResource("2_qtm2v")
+data = ExtResource("3_2da4t")
+slots = Array[ExtResource("4_j7iyr")]([SubResource("Resource_0l8gp")])
+instance_placement = SubResource("Resource_vg2sq")
+metadata/_edit_lock_ = true
+
+[node name="Hill" type="Node3D" parent="Terrain" unique_id=19965711 instance=ExtResource("7_xynm5")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -9, 0, -2)
+script = ExtResource("8_d3hqs")
+pivot = Vector2(8, 8)
+data = ExtResource("9_y5p3d")
+slots = Array[ExtResource("4_j7iyr")]([SubResource("Resource_7mh4w")])
+instance_placement = SubResource("Resource_pchbr")
+
+[node name="Forest" type="Node3D" parent="Terrain" unique_id=1983754931 instance=ExtResource("11_60pa3")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -9, 0, -2)
+script = ExtResource("8_d3hqs")
+data = ExtResource("12_2pcwr")
+scatter_data = ExtResource("13_hv0is")
+instance_slots = Array[ExtResource("14_g8qr4")]([SubResource("Resource_hykmd"), SubResource("Resource_g7ad0")])
+instance_placement = SubResource("Resource_xdgmj")
+
+[node name="RockSkin" type="Node3D" parent="Terrain" unique_id=1667137223 instance=ExtResource("11_60pa3")]
+transform = Transform3D(0.9393727, 0, 0.3428978, 0, 1, 0, -0.3428978, 0, 0.9393727, 11, 0, 5)
+script = ExtResource("8_d3hqs")
+data = ExtResource("12_2pcwr")
+bindings = ExtResource("17_wflw4")
+scatter_data = ExtResource("13_hv0is")
+instance_slots = Array[ExtResource("14_g8qr4")]([SubResource("Resource_hykmd"), SubResource("Resource_g7ad0")])
+instance_placement = SubResource("Resource_xdgmj")
+
+[node name="ClearingMask" type="Node3D" parent="Terrain" unique_id=1416975892]
+script = ExtResource("2_qtm2v")
+scatter_data = ExtResource("18_a2vmn")
+instance_mode = 1
+mask_categories = Array[StringName]([&"vegetation"])
+instance_placement = SubResource("Resource_75is3")
+metadata/_edit_lock_ = true
+
+[node name="AttachedRocks" type="Node3D" parent="Terrain" unique_id=481266136]
+script = ExtResource("19_p8xgk")
+settings = SubResource("Resource_dtty3")
+source = SubResource("Resource_6rwv3")
+solved_transforms = {
+"2a8a5b48e1b7e0d56fb75461": Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -1, 0, 11),
+"3ea4d8c31f0963507f031ca5": Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -3, 0, 11),
+"8a32ef8b605d4438dcfcfba2": Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 3, 0, 11),
+"dcffd35fa53e8de89f3db414": Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 1, 0, 11),
+"e57d4237e80a681c41cc9294": Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -5, 0, 11),
+"ff21d6f553c8e6ce0445515b": Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 5, 0, 11)
+}
+
+[node name="Rock0" type="Node3D" parent="Terrain/AttachedRocks" unique_id=2124641101 instance=ExtResource("21_xkvqg")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -5, 0, 11)
+metadata/_terrain3d_attachment_id = "e57d4237e80a681c41cc9294"
+
+[node name="Rock1" type="Node3D" parent="Terrain/AttachedRocks" unique_id=1229582767 instance=ExtResource("21_xkvqg")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -3, 0, 11)
+metadata/_terrain3d_attachment_id = "3ea4d8c31f0963507f031ca5"
+
+[node name="Rock2" type="Node3D" parent="Terrain/AttachedRocks" unique_id=533110611 instance=ExtResource("21_xkvqg")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -1, 0, 11)
+metadata/_terrain3d_attachment_id = "2a8a5b48e1b7e0d56fb75461"
+
+[node name="Rock3" type="Node3D" parent="Terrain/AttachedRocks" unique_id=1861413302 instance=ExtResource("21_xkvqg")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 1, 0, 11)
+metadata/_terrain3d_attachment_id = "dcffd35fa53e8de89f3db414"
+
+[node name="Rock4" type="Node3D" parent="Terrain/AttachedRocks" unique_id=14854242 instance=ExtResource("21_xkvqg")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 3, 0, 11)
+metadata/_terrain3d_attachment_id = "8a32ef8b605d4438dcfcfba2"
+
+[node name="Rock5" type="Node3D" parent="Terrain/AttachedRocks" unique_id=922689350 instance=ExtResource("21_xkvqg")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 5, 0, 11)
+metadata/_terrain3d_attachment_id = "ff21d6f553c8e6ce0445515b"
+
+[node name="RigidCabin" type="Node3D" parent="Terrain" unique_id=609877528]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 1, 0, -10)
+script = ExtResource("19_p8xgk")
+processing = 1
+settings = SubResource("Resource_lrfln")
+source = SubResource("Resource_tr028")
+solved_transforms = {
+"self": Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 1, 0, -10)
+}
+
+[node name="Cabin" type="Node3D" parent="Terrain/RigidCabin" unique_id=1082879677 instance=ExtResource("16_4e7rb")]
+
+[node name="Sun" type="DirectionalLight3D" parent="." unique_id=1668160448]
+transform = Transform3D(0.8660254, 0.40957603, -0.28678823, 0, 0.57357645, 0.81915206, 0.5, -0.7094065, 0.49673176, 0, 0, 0)
+shadow_enabled = true
+
+[node name="Environment" type="WorldEnvironment" parent="." unique_id=1165416079]
+environment = SubResource("Environment_0mbof")
+
+[node name="Camera3D" type="Camera3D" parent="." unique_id=38622918]
+transform = Transform3D(0.7525767, -0.31679323, 0.5772957, 0, 0.87667686, 0.48107976, -0.6585046, -0.36204943, 0.65976655, 42, 37, 48)
+current = true

@@ -341,7 +341,7 @@ void Terrain3DAssets::_update_mesh(const int p_id) {
 }
 
 void Terrain3DAssets::_setup_thumbnail_creation() {
-	IS_INIT(VOID);
+	// Local layer palettes can preview meshes without becoming a terrain's live assets.
 	if (_scenario.is_valid()) {
 		return;
 	}

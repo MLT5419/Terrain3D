@@ -11,3 +11,18 @@ extends Resource
 
 func resolve(key: StringName) -> Terrain3DTextureAsset:
 	return materials.get(key)
+
+@export var meshes: Dictionary[StringName, Terrain3DMeshAsset] = {}:
+	set(value):
+		meshes = value
+		emit_changed()
+@export var scenes: Dictionary[StringName, PackedScene] = {}:
+	set(value):
+		scenes = value
+		emit_changed()
+
+func resolve_instance(key: StringName, kind: int) -> Resource:
+	return meshes.get(key) if kind == Terrain3DInstanceSlot.Kind.MESH else scenes.get(key)
+
+func fingerprint() -> int:
+	return hash([materials, meshes, scenes])
