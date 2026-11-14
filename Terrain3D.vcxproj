@@ -156,6 +156,7 @@
     <ClInclude Include="src\terrain_3d_mesh_asset.h" />
     <ClInclude Include="src\terrain_3d_region.h" />
     <ClInclude Include="src\terrain_3d_texture_asset.h" />
+    <ClInclude Include="src\terrain_3d_material_baker.h" />
     <ClInclude Include="src\terrain_3d_util.h" />
     <ClInclude Include="src\terrain_3d_material.h" />
     <ClInclude Include="src\terrain_3d_assets.h" />
@@ -171,6 +172,7 @@
     <ClCompile Include="src\terrain_3d_editor.cpp" />
     <ClCompile Include="src\terrain_3d_instancer.cpp" />
     <ClCompile Include="src\terrain_3d_material.cpp" />
+    <ClCompile Include="src\terrain_3d_material_baker.cpp" />
     <ClCompile Include="src\terrain_3d_mesh_asset.cpp" />
     <ClCompile Include="src\terrain_3d_region.cpp" />
     <ClCompile Include="src\terrain_3d_texture_asset.cpp" />
@@ -233,6 +235,7 @@
     <None Include="src\shaders\displacement_buffer.glsl" />
     <None Include="src\shaders\macro_variation.glsl" />
     <None Include="src\shaders\main.glsl" />
+    <None Include="src\shaders\pbr_material.glsl" />
     <None Include="src\shaders\max_regions.glsl" />
     <None Include="src\shaders\overlays.glsl" />
     <None Include="src\shaders\pbr_views.glsl">

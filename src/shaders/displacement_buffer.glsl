@@ -61,6 +61,7 @@ uniform highp sampler2DArray _control_maps : repeat_disable;
 //INSERT: TEXTURE_SAMPLERS_NEAREST
 uniform highp sampler2DArray _texture_array_albedo : source_color, FILTER_METHOD, repeat_enable;
 uniform highp sampler2DArray _texture_array_normal : hint_normal, FILTER_METHOD, repeat_enable;
+//INSERT: PBR_MATERIAL_UNIFORMS
 group_uniforms;
 
 // Public uniforms
@@ -116,6 +117,8 @@ vec3 get_index_uv(const vec2 uv2) {
 ////////////////////////
 // Fragment
 ////////////////////////
+
+//INSERT: PBR_MATERIAL_HEIGHT_FUNCTIONS
 
 float random(in vec2 xy) {
 	return fract(sin(dot(xy, vec2(12.9898, 78.233))) * 43758.5453);
@@ -179,10 +182,8 @@ void accumulate_material(const mat3 TNB, const float weight, const ivec3 index,
 			fma(id_cs_angle.x, c_cs_angle.x, -id_cs_angle.y * c_cs_angle.y),
 			fma(id_cs_angle.y, c_cs_angle.x, id_cs_angle.x * c_cs_angle.y));
 
-		float h = textureLod(_texture_array_albedo, vec3(id_uv, float(id)), 0.).a;
-		vec4 nrm = textureLod(_texture_array_normal, vec3(id_uv, float(id)), 0.);
-		// Unpack and rotate normal map.
-		nrm.xyz = fma(nrm.xzy, vec3(2.0), vec3(-1.0));
+		float h = sample_terrain_height(id, id_uv);
+		vec4 nrm = vec4(sample_terrain_displacement_normal(id, id_uv), 0.);
 		nrm.xz = rotate_vec2(nrm.xz, id_cs_angle) * p_align;
 
 		world_normal = FAST_WORLD_NORMAL(nrm).y;
@@ -216,7 +217,7 @@ void accumulate_material(const mat3 TNB, const float weight, const ivec3 index,
 			fma(id_cs_angle.x, c_cs_angle.x, -id_cs_angle.y * c_cs_angle.y),
 			fma(id_cs_angle.y, c_cs_angle.x, id_cs_angle.x * c_cs_angle.y));
 
-		float h = textureLod(_texture_array_albedo, vec3(id_uv, float(id)), 0.).a;
+		float h = sample_terrain_height(id, id_uv);
 		// Normals are not required for 2nd ID as they are not used to adjust the weights.
 
 		float id_weight = exp2(sharpness * log2(weight + id_w + h * clamp(world_normal, 0., 1.))) * weight;

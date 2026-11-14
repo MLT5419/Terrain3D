@@ -3,11 +3,18 @@
 	<brief_description>
 	</brief_description>
 	<description>
-		A set of texture files and settings that gets added to a [Terrain3DAssets] resource. Textures must be prepared according to the [url=https://terrain3d.readthedocs.io/en/stable/docs/texture_prep.html]documentation[/url].
+		A terrain surface layer added to a [Terrain3DAssets] resource. Choose [member source_mode] to use prepared texture files or an editor-baked [StandardMaterial3D]/[ORMMaterial3D]. Switching modes preserves both configurations. Material caches are saved inside this resource; save the assets after preprocessing and before exporting.
 	</description>
 	<tutorials>
 	</tutorials>
 	<methods>
+		<method name="bake_material">
+			<return type="int" enum="Error" />
+			<param index="0" name="size" type="int" default="0" />
+			<description>
+				Prepares the material's packed texture cache. A size of zero uses [member material_texture_size]. Unchanged inputs reuse the cache. Compression is editor-only; exported games require a valid saved cache. The assets resource automatically uses the largest material layer resolution to produce compatible texture arrays.
+			</description>
+		</method>
 		<method name="clear">
 			<return type="void" />
 			<description>
@@ -41,6 +48,21 @@
 		</method>
 	</methods>
 	<members>
+		<member name="source_mode" type="int" enum="Terrain3DTextureAsset.SourceMode" setter="set_source_mode" getter="get_source_mode" default="0">
+			Selects prepared texture files or a PBR material. The inspector displays the controls for the selected mode.
+		</member>
+		<member name="material" type="BaseMaterial3D" setter="set_material" getter="get_material">
+			Source [StandardMaterial3D] or [ORMMaterial3D]. Supported channels are albedo, normal, height, roughness, metallic, ambient occlusion and emission. UV1 scale/offset, tint, normal strength, specular and AO light affect are transferred. Independent lighting models, transparency, additional passes and custom shaders are not transferred.
+		</member>
+		<member name="premultiply_ao" type="bool" setter="set_premultiply_ao" getter="get_premultiply_ao" default="false">
+			Bakes AO into albedo in linear color space and removes independent AO shading. This can darken directly lit surfaces and metallic reflections. An unused auxiliary map is omitted, but emission remains supported and may still require that map.
+		</member>
+		<member name="material_texture_size" type="int" setter="set_material_texture_size" getter="get_material_texture_size" default="1024">
+			Requested baking resolution. All material layers in the same assets resource use the largest requested resolution. Generated RGBA textures use desktop BC7 compression.
+		</member>
+		<member name="material_warnings" type="String" getter="get_material_warnings">
+			Read-only notes for source material features that the terrain adapter cannot transfer.
+		</member>
 		<member name="albedo_color" type="Color" setter="set_albedo_color" getter="get_albedo_color" default="Color(1, 1, 1, 1)">
 			This color is multiplied by the albedo texture in the shader.
 		</member>
@@ -88,7 +110,7 @@
 	<signals>
 		<signal name="file_changed">
 			<description>
-				Emitted when [member albedo_texture] or [member normal_texture] are changed.
+				Emitted when texture files or material pixels need rebuilding.
 			</description>
 		</signal>
 		<signal name="id_changed">
@@ -105,4 +127,12 @@
 			</description>
 		</signal>
 	</signals>
+	<constants>
+		<constant name="SOURCE_TEXTURES" value="0" enum="SourceMode">
+			Use the original prepared texture workflow. Default for existing assets.
+		</constant>
+		<constant name="SOURCE_MATERIAL" value="1" enum="SourceMode">
+			Use a preprocessed PBR material resource.
+		</constant>
+	</constants>
 </class>

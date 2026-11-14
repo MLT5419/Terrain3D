@@ -32,6 +32,13 @@ private:
 
 	GeneratedTexture _generated_albedo_textures;
 	GeneratedTexture _generated_normal_textures;
+	GeneratedTexture _material_albedo_textures;
+	GeneratedTexture _material_surface_textures;
+	GeneratedTexture _material_emission_textures;
+	PackedVector2Array _texture_material_indices;
+	PackedColorArray _texture_material_uvs;
+	PackedVector2Array _texture_material_properties;
+	double _material_poll_time = 0.;
 	PackedColorArray _texture_colors;
 	PackedFloat32Array _texture_normal_depths;
 	PackedFloat32Array _texture_ao_strengths;
@@ -57,6 +64,7 @@ private:
 	void _set_asset(const AssetType p_type, const int p_id, const Ref<Terrain3DAssetResource> &p_asset);
 
 	void _update_texture_files();
+	bool _update_material_files();
 	void _update_texture_settings();
 	void _update_mesh(const int p_id);
 	void _setup_thumbnail_creation();
@@ -77,6 +85,12 @@ public:
 	int get_generated_array_size() const { return _generated_albedo_textures.size(); }
 	RID get_albedo_array_rid() const { return _generated_albedo_textures.get_rid(); }
 	RID get_normal_array_rid() const { return _generated_normal_textures.get_rid(); }
+	RID get_material_albedo_rid() const { return _material_albedo_textures.get_rid(); }
+	RID get_material_surface_rid() const { return _material_surface_textures.get_rid(); }
+	RID get_material_emission_rid() const { return _material_emission_textures.get_rid(); }
+	PackedVector2Array get_texture_material_indices() const { return _texture_material_indices; }
+	PackedColorArray get_texture_material_uvs() const { return _texture_material_uvs; }
+	PackedVector2Array get_texture_material_properties() const { return _texture_material_properties; }
 	PackedColorArray get_texture_colors() const { return _texture_colors; }
 	PackedFloat32Array get_texture_normal_depths() const { return _texture_normal_depths; }
 	PackedFloat32Array get_texture_ao_strengths() const { return _texture_ao_strengths; }
@@ -87,6 +101,7 @@ public:
 	PackedVector2Array get_texture_displacements() const { return _texture_displacements; }
 	void clear_textures(const bool p_update = false);
 	void update_texture_list();
+	void poll_material_changes(double p_delta);
 
 	void set_mesh_asset(const int p_id, const Ref<Terrain3DMeshAsset> &p_mesh_asset);
 	Ref<Terrain3DMeshAsset> get_mesh_asset(const int p_id) const;

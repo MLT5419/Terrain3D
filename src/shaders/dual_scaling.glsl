@@ -17,6 +17,8 @@ group_uniforms;
 	vec4 far_alb = vec4(0.);
 	vec4 far_nrm = vec4(0.);
 	float far_ao = 1.0;
+	vec3 far_pbr = vec3(0.);
+	vec3 far_emission = vec3(0.);
 	if (far_factor > 0. && any(equal(texture_id, ivec2(dual_scale_texture)))) {
 		float far_scale = _texture_uv_scale_array[dual_scale_texture] * dual_scale_reduction;
 		if (index.z < 0) {
@@ -39,15 +41,7 @@ group_uniforms;
 		far_dd.xy = rotate_vec2(far_dd.xy, far_cs_angle);
 		far_dd.zw = rotate_vec2(far_dd.zw, far_cs_angle);
 
-		far_alb = textureGrad(_texture_array_albedo, vec3(far_uv, float(dual_scale_texture)), far_dd.xy, far_dd.zw);
-		far_nrm = textureGrad(_texture_array_normal, vec3(far_uv, float(dual_scale_texture)), far_dd.xy, far_dd.zw);
-		far_alb.rgb *= _texture_color_array[dual_scale_texture].rgb;
-		far_nrm.a = clamp(far_nrm.a + _texture_roughness_mod_array[dual_scale_texture], 0., 1.);
-		// Unpack and rotate normal map.
-		far_nrm.xyz = fma(far_nrm.xzy, vec3(2.0), vec3(-1.0));
-		far_ao = length(far_nrm.xyz) * 2.0 - 1.0;
-		far_ao = mix(far_ao * far_ao * _texture_ao_strength_array[dual_scale_texture] + 1.0 - _texture_ao_strength_array[dual_scale_texture], 1.0, far_alb.a * far_alb.a);
-		far_nrm.xyz = normalize(far_nrm.xyz);
+		sample_terrain_layer(dual_scale_texture, far_uv, far_dd, far_alb, far_nrm, far_ao, far_pbr, far_emission);
 		far_nrm.xz = rotate_vec2(far_nrm.xz, far_cs_angle) * p_align;
 		
 		// apply weighting when far_factor == 1.0 as the later lookup will be skipped.
@@ -60,6 +54,8 @@ group_uniforms;
 			mat.normal_map_depth = fma(_texture_normal_depth_array[dual_scale_texture], id_weight, mat.normal_map_depth);
 			mat.ao = fma(far_ao, id_weight, mat.ao);
 			mat.ao_affect = fma(_texture_ao_affect_array[dual_scale_texture], id_weight, mat.ao_affect);
+			mat.pbr = fma(far_pbr, vec3(id_weight), mat.pbr);
+			mat.emission = fma(far_emission, vec3(id_weight), mat.emission);
 			mat.total_weight += id_weight;
 		}
 	}
@@ -74,6 +70,8 @@ group_uniforms;
 			alb = mix(alb, far_alb, far_factor);
 			nrm = mix(nrm, far_nrm, far_factor);
 			ao = mix(ao, far_ao, far_factor);
+			pbr = mix(pbr, far_pbr, far_factor);
+			emission = mix(emission, far_emission, far_factor);
 			world_normal = mix(world_normal, 1.0, far_factor);
 		}
 )"

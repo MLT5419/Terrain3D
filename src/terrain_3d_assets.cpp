@@ -186,9 +186,52 @@ void Terrain3DAssets::_set_asset(const AssetType p_type, const int p_id, const R
 	}
 }
 
+bool Terrain3DAssets::_update_material_files() {
+	PackedVector2Array material_indices;
+	material_indices.resize(MAX_TEXTURES);
+	material_indices.fill(Vector2(-1, -1));
+	int size = 0;
+	int index = 0;
+	for (const Ref<Terrain3DTextureAsset> &asset : _texture_list) {
+		if (asset.is_valid() && asset->get_source_mode() == Terrain3DTextureAsset::SOURCE_MATERIAL && (asset->get_material().is_valid() || asset->get_runtime_material_cache())) {
+			size = MAX(size, asset->get_material_texture_size());
+		}
+	}
+	TypedArray<Image> albedo, surface, emission;
+	for (const Ref<Terrain3DTextureAsset> &asset : _texture_list) {
+		Vector2 indices(-1, -1);
+		if (asset.is_valid() && asset->get_source_mode() == Terrain3DTextureAsset::SOURCE_MATERIAL && (asset->get_material().is_valid() || asset->get_runtime_material_cache())) {
+			if (asset->bake_material(size) != OK) {
+				LOG(ERROR, "Cannot prepare PBR material for texture ID ", asset->get_id());
+				return false;
+			}
+			TypedArray<Image> cache = asset->get_material_cache();
+			indices.x = albedo.size();
+			albedo.push_back(cache[0]);
+			surface.push_back(cache[1]);
+			if (cache.size() == 3) {
+				indices.y = emission.size();
+				emission.push_back(cache[2]);
+			}
+		}
+		material_indices.set(index++, indices);
+	}
+	_material_albedo_textures.clear();
+	_material_surface_textures.clear();
+	_material_emission_textures.clear();
+	_texture_material_indices = material_indices;
+	_material_albedo_textures.create(albedo);
+	_material_surface_textures.create(surface);
+	_material_emission_textures.create(emission);
+	return true;
+}
+
 void Terrain3DAssets::_update_texture_files() {
 	IS_INIT(VOID);
 	LOG(DEBUG, "Received texture_changed signal");
+	if (!_update_material_files()) {
+		return;
+	}
 	_generated_albedo_textures.clear();
 	_generated_normal_textures.clear();
 	if (_texture_list.is_empty()) {
@@ -205,6 +248,8 @@ void Terrain3DAssets::_update_texture_files() {
 	Image::Format normal_format = Image::FORMAT_MAX;
 	bool albedo_mipmaps = true;
 	bool normal_mipmaps = true;
+	Ref<Image> albedo_placeholder;
+	Ref<Image> normal_placeholder;
 	_terrain->set_warning(WARN_ALL, false);
 
 	for (const Ref<Terrain3DTextureAsset> &ta : _texture_list) {
@@ -212,6 +257,9 @@ void Terrain3DAssets::_update_texture_files() {
 			continue;
 		}
 
+		if (ta->get_source_mode() == Terrain3DTextureAsset::SOURCE_MATERIAL) {
+			continue;
+		}
 		Ref<Texture2D> albedo_tex = ta->_albedo_texture;
 		if (albedo_tex.is_valid()) {
 			Vector2i tex_size = albedo_tex->get_size();
@@ -221,6 +269,7 @@ void Terrain3DAssets::_update_texture_files() {
 
 			// If this is the first valid texture, set expected size and format for the arrays
 			if (albedo_format == Image::FORMAT_MAX) {
+				albedo_placeholder = img;
 				albedo_size = tex_size;
 				albedo_format = format;
 				albedo_mipmaps = mipmaps;
@@ -249,6 +298,7 @@ void Terrain3DAssets::_update_texture_files() {
 
 			// If this is the first valid texture, set expected size and format for the arrays
 			if (normal_format == Image::FORMAT_MAX) {
+				normal_placeholder = img;
 				normal_size = tex_size;
 				normal_format = format;
 				normal_mipmaps = mipmaps;
@@ -279,7 +329,8 @@ void Terrain3DAssets::_update_texture_files() {
 		albedo_size = normal_size;
 	}
 	if (albedo_size == V2I_ZERO) {
-		albedo_size = V2I(1024);
+		// A material-only terrain needs tiny placeholder legacy arrays.
+		albedo_size = _material_albedo_textures.size() > 0 ? V2I(4) : V2I(1024);
 		normal_size = albedo_size;
 	}
 
@@ -294,6 +345,11 @@ void Terrain3DAssets::_update_texture_files() {
 			}
 			Ref<Texture2D> tex = ta->_albedo_texture;
 			Ref<Image> img;
+			if (ta->get_source_mode() == Terrain3DTextureAsset::SOURCE_MATERIAL) {
+				// Reuse a matching image: exported builds cannot compress new placeholder images.
+				albedo_texture_array.push_back(albedo_placeholder.is_valid() ? albedo_placeholder : Util::get_filled_image(albedo_size, COLOR_CHECKED, albedo_mipmaps, albedo_format));
+				continue;
+			}
 
 			if (tex.is_null()) {
 				img = Util::get_filled_image(albedo_size, COLOR_CHECKED, albedo_mipmaps, albedo_format);
@@ -324,6 +380,10 @@ void Terrain3DAssets::_update_texture_files() {
 			}
 			Ref<Texture2D> tex = ta->_normal_texture;
 			Ref<Image> img;
+			if (ta->get_source_mode() == Terrain3DTextureAsset::SOURCE_MATERIAL) {
+				normal_texture_array.push_back(normal_placeholder.is_valid() ? normal_placeholder : Util::get_filled_image(normal_size, COLOR_NORMAL, normal_mipmaps, normal_format));
+				continue;
+			}
 
 			if (tex.is_null()) {
 				img = Util::get_filled_image(normal_size, COLOR_NORMAL, normal_mipmaps, normal_format);
@@ -358,23 +418,31 @@ void Terrain3DAssets::_update_texture_settings() {
 		_texture_uv_scales.clear();
 		_texture_detiles.clear();
 		_texture_displacements.clear();
+		_texture_material_uvs.clear();
+		_texture_material_properties.clear();
 
 		for (const Ref<Terrain3DTextureAsset> &ta : _texture_list) {
 			if (ta.is_null()) {
 				continue;
 			}
+			bool material = ta->get_source_mode() == Terrain3DTextureAsset::SOURCE_MATERIAL && !ta->get_material_settings().is_empty();
+			Dictionary settings = ta->get_material_settings();
 			if (ta->is_highlighted()) {
 				_texture_colors.push_back(ta->get_highlight_color());
 			} else {
-				_texture_colors.push_back(ta->get_albedo_color());
+				_texture_colors.push_back(material ? Color(settings["color"]) : ta->get_albedo_color());
 			}
-			_texture_normal_depths.push_back(ta->get_normal_depth());
+			_texture_normal_depths.push_back(material ? float(settings["normal_depth"]) : ta->get_normal_depth());
 			_texture_ao_strengths.push_back(ta->get_ao_strength());
-			_texture_ao_light_affects.push_back(ta->get_ao_light_affect());
-			_texture_roughness_mods.push_back(ta->get_roughness());
+			_texture_ao_light_affects.push_back(material ? float(settings["ao_affect"]) : ta->get_ao_light_affect());
+			_texture_roughness_mods.push_back(material ? 0.f : ta->get_roughness());
 			_texture_uv_scales.push_back(ta->get_uv_scale());
 			_texture_detiles.push_back(Vector2(ta->get_detiling_rotation(), ta->get_detiling_shift()));
 			_texture_displacements.push_back(Vector2(ta->get_displacement_offset(), ta->get_displacement_scale()));
+			Vector3 scale = material ? Vector3(settings["uv_scale"]) : Vector3(1, 1, 1);
+			Vector3 offset = material ? Vector3(settings["uv_offset"]) : Vector3();
+			_texture_material_uvs.push_back(Color(scale.x, scale.y, offset.x, offset.y));
+			_texture_material_properties.push_back(Vector2(ta->get_material_emission_scale(), material ? float(settings["specular"]) : .5f));
 		}
 	}
 	LOG(DEBUG, "Emitting textures_changed");
@@ -458,6 +526,9 @@ void Terrain3DAssets::destroy() {
 	LOG(INFO, "Destroying assets");
 	_terrain = nullptr;
 	_generated_albedo_textures.clear();
+	_material_albedo_textures.clear();
+	_material_surface_textures.clear();
+	_material_emission_textures.clear();
 	_generated_normal_textures.clear();
 	_texture_list.clear();
 	_mesh_list.clear();
@@ -518,6 +589,22 @@ void Terrain3DAssets::clear_textures(const bool p_update) {
 	_texture_list.clear();
 	if (p_update) {
 		update_texture_list();
+	}
+}
+
+void Terrain3DAssets::poll_material_changes(double p_delta) {
+	if (!IS_EDITOR) {
+		return;
+	}
+	_material_poll_time += p_delta;
+	if (_material_poll_time < .15) {
+		return;
+	}
+	_material_poll_time = 0.;
+	for (const Ref<Terrain3DTextureAsset> &asset : _texture_list) {
+		if (asset.is_valid()) {
+			asset->_poll_material_changes();
+		}
 	}
 }
 

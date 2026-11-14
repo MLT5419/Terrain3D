@@ -21,6 +21,9 @@
 void Terrain3DMaterial::_preload_shaders() {
 	// Preprocessor loading of external shader inserts
 	_parse_shader(
+#include "shaders/pbr_material.glsl"
+			, "pbr_material");
+	_parse_shader(
 #include "shaders/auto_shader.glsl"
 			, "auto_shader");
 	_parse_shader(
@@ -580,6 +583,9 @@ String Terrain3DMaterial::_inject_editor_code(const String &p_shader) const {
 	// Apply pending inserts
 	for (const String &name : insert_names) {
 		String insert = _shader_code[name];
+		if (name.begins_with("DEBUG_")) {
+			insert = "\nMETALLIC = 0.;\nEMISSION = vec3(0.);\n" + insert;
+		}
 		shader = shader.insert(idx, "\n" + insert);
 		idx += insert.length();
 	}
@@ -801,6 +807,15 @@ void Terrain3DMaterial::_update_uniforms(const RID &p_material, const uint32_t p
 	RS->material_set_param(p_material, "_texture_uv_scale_array", asset_list->get_texture_uv_scales());
 	RS->material_set_param(p_material, "_texture_detile_array", asset_list->get_texture_detiles());
 	RS->material_set_param(p_material, "_texture_displacement_array", asset_list->get_texture_displacements());
+	RS->material_set_param(p_material, "_texture_material_indices", asset_list->get_texture_material_indices());
+	RS->material_set_param(p_material, "_texture_material_uvs", asset_list->get_texture_material_uvs());
+	RS->material_set_param(p_material, "_texture_material_properties", asset_list->get_texture_material_properties());
+	RID albedo = asset_list->get_material_albedo_rid();
+	RID surface = asset_list->get_material_surface_rid();
+	RID emission = asset_list->get_material_emission_rid();
+	RS->material_set_param(p_material, "_material_array_albedo", albedo.is_valid() ? albedo : _generated_dummy.get_rid());
+	RS->material_set_param(p_material, "_material_array_surface", surface.is_valid() ? surface : _generated_dummy.get_rid());
+	RS->material_set_param(p_material, "_material_array_emission", emission.is_valid() ? emission : _generated_dummy.get_rid());
 }
 
 void Terrain3DMaterial::_set_shader_parameters(const Dictionary &p_dict) {

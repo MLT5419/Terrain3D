@@ -15,6 +15,9 @@ Once your texture files have been prepared, this document describes how to use t
 
 
 ### Managing the Texture List
+
+To reuse a `StandardMaterial3D` or `ORMMaterial3D`, change a layer's **Source Mode** to **PBR Material**, or drag the material onto its Asset Dock entry. See [PBR Material Layers](pbr_materials.md) for preprocessing, AO premultiplication and supported features.
+
 * Unused texture slots take up memory with the default generated textures. Remove unused slots.
 * Right-click any texture slot in the Asset Dock to bring it into edit mode.
 * Middle-click any texture slot to clear or delete it. You can only delete the last texture in the list.
