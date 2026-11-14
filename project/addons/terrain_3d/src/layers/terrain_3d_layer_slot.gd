@@ -3,6 +3,8 @@
 class_name Terrain3DLayerSlot
 extends Resource
 ## A stable material role. Array position is the local paint ID; never reorder painted slots.
+@export var programs: Array[Terrain3DProgramSlot] = []
+@export var inherit_asset_programs := true
 
 ## Stable material role, for example surface.ground or ruins.special_stone.
 @export var key: StringName = &"surface.ground":

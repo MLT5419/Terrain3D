@@ -157,6 +157,8 @@ func compose(stack: Terrain3DLayerStack) -> void:
 	var output := {}
 	var wanted := {}
 	for record in records:
+		if stack.program_scheduler and stack.program_scheduler.suppresses(record.pose.origin, record.category):
+			continue
 		var scene_node: Node3D
 		if record.mesh < 0:
 			scene_node = _ensure_scene(host, record.id, record.resource)

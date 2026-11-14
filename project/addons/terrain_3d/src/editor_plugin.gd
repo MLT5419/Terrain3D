@@ -23,6 +23,7 @@ var viewport: SubViewport # Viewport the mouse was last in
 var mouse_in_main: bool = false # Helper to track when mouse is in the editor vp
 var export_plugin: EditorExportPlugin = ExportPlugin.new()
 var layer_gizmo: EditorNode3DGizmoPlugin
+var program_inspector: EditorInspectorPlugin
 
 # Terrain
 var terrain: Terrain3D
@@ -82,6 +83,8 @@ func _enter_tree() -> void:
 	add_export_plugin(export_plugin)
 	layer_gizmo = preload("res://addons/terrain_3d/src/layers/terrain_3d_layer_gizmo.gd").new()
 	add_node_3d_gizmo_plugin(layer_gizmo)
+	program_inspector = preload("res://addons/terrain_3d/src/programs/terrain_3d_program_inspector.gd").new()
+	add_inspector_plugin(program_inspector)
 
 
 func _exit_tree() -> void:
@@ -96,6 +99,7 @@ func _exit_tree() -> void:
 	godot_editor_window.focus_entered.disconnect(_on_godot_focus_entered)
 	remove_export_plugin(export_plugin)
 	remove_node_3d_gizmo_plugin(layer_gizmo)
+	remove_inspector_plugin(program_inspector)
 
 
 func _on_godot_focus_entered() -> void:
